@@ -33,21 +33,19 @@ while True:
         }
 
         try:
-            # Server URL from provisioned files (same as download URL but different endpoint)
-            # Assumes you provisioned the same IP but port 9020 for tracking
-            url = "http://{}:{}/ping".format(
-                open('/server_ip.txt', 'r').read().strip(),
-                open('/server_port.txt', 'r').read().strip() or '9020'  # fallback if not provisioned
-            )
+            server_ip = open('/server_ip.txt', 'r').read().strip()
+            server_port = '9020'  # Force tracking port
+            url = f"http://{server_ip}:{server_port}/ping"
 
             response = urequests.post(
                 url,
                 data=ujson.dumps(data),
                 headers={'Content-Type': 'application/json'}
             )
+            # Optional: check response.status_code == 200 for stricter success
+            print("[{}] Ping successful - reported IP: {}, Uptime: {}s (status: {})".format(
+                time.ticks_ms() // 1000, local_ip, uptime_sec, response.status_code))
             response.close()
-            print("[{}] Ping successful - reported IP: {}, Uptime: {}s".format(
-                time.ticks_ms() // 1000, local_ip, uptime_sec))
         except Exception as e:
             print("[{}] Ping failed: {}".format(time.ticks_ms() // 1000, e))
     else:
