@@ -1,41 +1,56 @@
-# secondary.py - ESP32-C2 Christmas Gift LED Animation (Test Version)
-# Loops festive LED patterns; prints status. Runs until reset.
+# secondary.py - ESP32-C2 Chip Tracking Ping Client
+# Periodically reports MAC, IP, and uptime to your desktop server.
+# Prints status to console on successful ping.
 
-import machine
+import network
+import urequests
+import ujson
+import ubinascii
 import time
-import uos
+import machine
 
-# Built-in LED on GPIO 2 (adjust for your board)
-led = machine.Pin(2, machine.Pin.OUT)
+# Get WiFi interface
+sta_if = network.WLAN(network.STA_IF)
 
-def blink_fast(count=10, delay=0.1):
-    """Twinkling lights pattern."""
-    for _ in range(count):
-        led.on()
-        time.sleep(delay)
-        led.off()
-        time.sleep(delay)
+# Get MAC address (as colon-separated hex string, uppercase)
+mac_bytes = sta_if.config('mac')
+mac = ubinascii.hexlify(mac_bytes, ':').decode().upper()
 
-def blink_slow(count=3, delay=0.5):
-    """Gift reveal pulse."""
-    for _ in range(count):
-        led.on()
-        time.sleep(delay)
-        led.off()
-        time.sleep(delay * 2)
+print("secondary.py loaded. MAC: {}".format(mac))
+print("Starting tracking ping loop (every 5 minutes)...")
 
-def christmas_cycle():
-    """One full holiday cycle."""
-    print("🎄 Merry Christmas! Starting gift animation... Also Willoh Shoutout! 🎁")
-    blink_fast(20, 0.05)  # Fast twinkles
-    blink_slow(5, 0.3)    # Slow reveal
-    print("Animation complete. Uptime: {}s".format(time.ticks_ms() // 1000))
-    led.off()  # Idle low
+PING_INTERVAL = 300  # 5 minutes in seconds
 
-print("secondary.py loaded. Starting Christmas gift loop...")
-cycle_count = 0
 while True:
-    cycle_count += 1
-    christmas_cycle()
-    print(f"Cycle {cycle_count} done. Waiting for next reset...")
-    time.sleep(5)  # Short pause between cycles
+    if sta_if.isconnected():
+        local_ip = sta_if.ifconfig()[0]
+        uptime_sec = time.ticks_ms() // 1000
+
+        data = {
+            'mac': mac,
+            'ip': local_ip,
+            'uptime': uptime_sec
+        }
+
+        try:
+            # Server URL from provisioned files (same as download URL but different endpoint)
+            # Assumes you provisioned the same IP but port 9020 for tracking
+            url = "http://{}:{}/ping".format(
+                open('/server_ip.txt', 'r').read().strip(),
+                open('/server_port.txt', 'r').read().strip() or '9020'  # fallback if not provisioned
+            )
+
+            response = urequests.post(
+                url,
+                data=ujson.dumps(data),
+                headers={'Content-Type': 'application/json'}
+            )
+            response.close()
+            print("[{}] Ping successful - reported IP: {}, Uptime: {}s".format(
+                time.ticks_ms() // 1000, local_ip, uptime_sec))
+        except Exception as e:
+            print("[{}] Ping failed: {}".format(time.ticks_ms() // 1000, e))
+    else:
+        print("Not connected to WiFi - skipping ping")
+
+    time.sleep(PING_INTERVAL)
