@@ -26,7 +26,7 @@ def blink_slow(count=3, delay=0.5):
 
 def christmas_cycle():
     """One full holiday cycle."""
-    print("🎄 Merry Christmas! Starting gift animation... 🎁")
+    print("🎄 Merry Christmas! Starting gift animation... Also Willoh Shoutout! 🎁")
     blink_fast(20, 0.05)  # Fast twinkles
     blink_slow(5, 0.3)    # Slow reveal
     print("Animation complete. Uptime: {}s".format(time.ticks_ms() // 1000))
