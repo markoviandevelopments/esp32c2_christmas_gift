@@ -6,9 +6,6 @@ import ujson
 import ubinascii
 from st7735 import TFT
 
-# ======================
-# 1. DISPLAY SETUP
-# ======================
 sck_pin = machine.Pin(8)   # SCL
 mosi_pin = machine.Pin(20) # SDA (was TX — will be released later)
 dc_pin = machine.Pin(9)    # DC
@@ -19,22 +16,12 @@ spi = machine.SPI(1, baudrate=4000000, polarity=0, phase=0, sck=sck_pin, mosi=mo
 
 tft = TFT(spi, dc_pin, rst_pin, None)
 tft.init_7735(TFT.GREENTAB80x160)
-
-# Your working orientation and mirror settings
 tft.rotation(1)
 mirror_text = False
-
-# ======================
-# 2. GET MAC ADDRESS EARLY
-# ======================
 sta_if = network.WLAN(network.STA_IF)
 sta_if.active(True)
 mac_bytes = sta_if.config('mac')
 mac = ubinascii.hexlify(mac_bytes, ':').decode().upper()
-
-# ======================
-# 3. DISPLAY MAC ADDRESS FIRST
-# ======================
 tft.fill(TFT.BLACK)  # White background
 w, h = tft.size()
 text_width = len(mac) * 6
@@ -42,10 +29,6 @@ x = (w - text_width) // 2
 y = (h - 8) // 2
 tft.draw_small_text((x, y), mac, TFT.WHITE, mirror=mirror_text)
 time.sleep(8)  # Show MAC for 8 seconds
-
-# ======================
-# 4. RUN PEPE DISPLAY WITH CIRCLES (30 seconds total)
-# ======================
 seed = 12345
 def rand():
     global seed
@@ -91,11 +74,6 @@ while time.time() - start_time < 30:  # Run display for 30 seconds
     tft.draw_small_text((x, y), text, TFT.WHITE, mirror=mirror_text)
 
     time.sleep(5)
-
-# ======================
-# 5. CLEAN UP DISPLAY — RELEASE PINS
-# ======================
-# Deinitialize SPI and pins so GPIO19 (RX) and GPIO20 (TX) go back to UART0
 spi.deinit()
 dc_pin = None   # Release DC pin
 rst_pin = None  # Release RST pin (important: was RX)
@@ -103,11 +81,6 @@ rst_pin = None  # Release RST pin (important: was RX)
 
 # Small delay to let hardware settle
 time.sleep(0.5)
-
-# ======================
-# 6. RESTORE UART0 (RX/TX) AND TRACKING PING CLIENT
-# ======================
-# Force UART0 back to default pins (this ensures REPL and prints work)
 uart = machine.UART(0, baudrate=115200, tx=machine.Pin(20), rx=machine.Pin(19))
 
 # Connect to WiFi
