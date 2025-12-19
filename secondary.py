@@ -1,7 +1,11 @@
-# secondary.py - Bit-banged ST7735: 90° CCW rotation, fixed offsets/shift, better font, proxy on 9021
+# secondary.py - Bit-banged ST7735: full uppercase font + free memory print
 import time
 import urequests
 import machine
+import gc
+
+# === Print free memory before anything else ===
+print("Free memory at secondary start:", gc.mem_free())
 
 # === Pins ===
 sck = machine.Pin(8, machine.Pin.OUT)
@@ -49,7 +53,7 @@ send_command(0xC3, bytes([0x8A, 0x2A]))
 send_command(0xC4, bytes([0x8A, 0xEE]))
 send_command(0xC5, bytes([0x0E]))
 send_command(0x21)  # INVON
-send_command(0x36, bytes([0x60]))  # MADCTL: 90° clockwise (effective CCW with wiring + correct offsets)
+send_command(0x36, bytes([0x60]))  # MADCTL for rotation
 send_command(0xE0, bytes([0x02,0x1C,0x07,0x12,0x37,0x32,0x29,0x2D,0x29,0x25,0x2B,0x39,0x00,0x01,0x03,0x10]))
 send_command(0xE1, bytes([0x03,0x1D,0x07,0x06,0x2E,0x2C,0x29,0x2D,0x2E,0x2E,0x37,0x3F,0x00,0x00,0x02,0x10]))
 send_command(0x13)
@@ -57,10 +61,10 @@ time.sleep_ms(10)
 send_command(0x29)
 time.sleep_ms(100)
 
-# === Window (fixed offsets to eliminate shift/fuzz) ===
+# === Window ===
 def set_window(x0, y0, x1, y1):
-    send_command(0x2A, bytes([0, x0 + 2, 0, x1 + 2]))   # CASET +2 (eliminates left fuzz)
-    send_command(0x2B, bytes([0, y0 + 24, 0, y1 + 24]))  # RASET +24 (eliminates bottom fuzz/shift)
+    send_command(0x2A, bytes([0, x0 + 2, 0, x1 + 2]))
+    send_command(0x2B, bytes([0, y0 + 24, 0, y1 + 24]))
     send_command(0x2C)
 
 # === Fill black ===
@@ -69,7 +73,7 @@ for _ in range(160 * 80):
     send_byte(0x00, 1)
     send_byte(0x00, 1)
 
-# === Improved font (fixed I thicker, L proper, A/E clearer, added V,U for VALUE/TIME) ===
+# === Full uppercase font (A-Z complete + digits + symbols) ===
 font = {
     ' ': [0x00,0x00,0x00,0x00,0x00],
     '0': [0x7C,0xA2,0x92,0x8A,0x7C],
@@ -85,21 +89,35 @@ font = {
     ':': [0x00,0x36,0x36,0x00,0x00],
     '.': [0x00,0x00,0x00,0x06,0x06],
     '$': [0x24,0x54,0xFE,0x54,0x48],
-    'M': [0xFE,0x40,0x30,0x40,0xFE],
     'A': [0x3E,0x48,0x48,0x48,0x3E],
+    'B': [0xFE,0x92,0x92,0x92,0x6C],
     'C': [0x7C,0x82,0x82,0x82,0x44],
+    'D': [0xFE,0x82,0x82,0x82,0x7C],
     'E': [0xFE,0x92,0x92,0x92,0x82],
+    'F': [0xFE,0x90,0x90,0x90,0x80],
+    'G': [0x7C,0x82,0x92,0x92,0x5C],
+    'H': [0xFE,0x10,0x10,0x10,0xFE],
     'I': [0x00,0x82,0xFE,0x82,0x00],
+    'J': [0x04,0x02,0x82,0xFC,0x80],
+    'K': [0xFE,0x10,0x28,0x44,0x82],
     'L': [0xFE,0x02,0x02,0x02,0x02],
-    'V': [0xF8,0x04,0x02,0x04,0xF8],
-    'U': [0xFC,0x02,0x02,0x02,0xFC],
-    'T': [0x80,0x80,0xFE,0x80,0x80],
-    'X': [0xC6,0x28,0x10,0x28,0xC6],
-    'R': [0xFE,0x90,0x98,0x94,0x62],
+    'M': [0xFE,0x40,0x30,0x40,0xFE],
+    'N': [0xFE,0x20,0x10,0x08,0xFE],
+    'O': [0x7C,0x82,0x82,0x82,0x7C],
     'P': [0xFE,0x90,0x90,0x90,0x60],
+    'Q': [0x7C,0x82,0x8A,0x84,0x7A],
+    'R': [0xFE,0x90,0x98,0x94,0x62],
+    'S': [0x62,0x92,0x92,0x92,0x8C],
+    'T': [0x80,0x80,0xFE,0x80,0x80],
+    'U': [0xFC,0x02,0x02,0x02,0xFC],
+    'V': [0xF8,0x04,0x02,0x04,0xF8],
+    'W': [0xFC,0x02,0x1C,0x02,0xFC],
+    'X': [0xC6,0x28,0x10,0x28,0xC6],
+    'Y': [0xE0,0x10,0x0E,0x10,0xE0],
+    'Z': [0x86,0x8A,0x92,0xA2,0xC2],
 }
 
-# === Draw text (shifted down/left for visibility) ===
+# === Draw text ===
 def draw_text(x_start, y_start, text):
     x = x_start
     for char in text.upper():
@@ -114,9 +132,9 @@ def draw_text(x_start, y_start, text):
                         send_byte(0xFF, 1)
         x += 6
 
-# === Draw simple XRP logo (white circle with black X lines inside) ===
+# === XRP logo function (unchanged from your version) ===
 def draw_xrp_logo(center_x, center_y, radius):
-    # Fill white circle (simple raster fill - good enough for small radius)
+    # Fill white circle
     for dy in range(-radius, radius + 1):
         for dx in range(-radius, radius + 1):
             if dx*dx + dy*dy <= radius*radius:
@@ -124,17 +142,12 @@ def draw_xrp_logo(center_x, center_y, radius):
                 py = center_y + dy
                 if 0 <= px < 160 and 0 <= py < 80:
                     set_window(px, py, px, py)
-                    send_byte(0xFF, 1)  # White high
-                    send_byte(0xFF, 1)  # White low
-
-    # Draw three black curved lines (approximated as straight segments for speed)
-    # Line 1: top-left to bottom-right curve
+                    send_byte(0xFF, 1)
+                    send_byte(0xFF, 1)
+    # Black X lines
     points1 = [(center_x - radius//2, center_y - radius), (center_x, center_y - radius//3), (center_x + radius//2, center_y + radius)]
-    # Line 2: top-right to bottom-left curve
     points2 = [(center_x + radius//2, center_y - radius), (center_x, center_y - radius//3), (center_x - radius//2, center_y + radius)]
-    # Line 3: middle horizontal curve (slight arc)
     points3 = [(center_x - radius, center_y), (center_x, center_y + radius//4), (center_x + radius, center_y)]
-
     def draw_line(points):
         for i in range(len(points) - 1):
             x0, y0 = points[i]
@@ -147,8 +160,8 @@ def draw_xrp_logo(center_x, center_y, radius):
             while True:
                 if 0 <= x0 < 160 and 0 <= y0 < 80:
                     set_window(x0, y0, x0, y0)
-                    send_byte(0x00, 1)  # Black high
-                    send_byte(0x00, 1)  # Black low
+                    send_byte(0x00, 1)
+                    send_byte(0x00, 1)
                 if x0 == x1 and y0 == y1: break
                 e2 = 2 * err
                 if e2 > -dy:
@@ -157,7 +170,6 @@ def draw_xrp_logo(center_x, center_y, radius):
                 if e2 < dx:
                     err += dx
                     y0 += sy
-
     draw_line(points1)
     draw_line(points2)
     draw_line(points3)
@@ -166,7 +178,7 @@ def draw_xrp_logo(center_x, center_y, radius):
 mac_bytes = machine.unique_id()
 mac_str = ':'.join(['{:02X}'.format(b) for b in mac_bytes])
 
-# === Proxy on port 9021 ===
+# === Proxy on 9021 ===
 try:
     proxy_ip = open('/server_ip.txt').read().strip()
 except OSError:
@@ -179,6 +191,7 @@ draw_text(10, 8, "MAC: " + mac_str)
 draw_text(10, 22, "XRP: ---")
 draw_text(10, 36, "VAL: ---")
 draw_text(10, 50, "TIME: --:--:-- CT")
+draw_xrp_logo(140, 40, 10)
 
 # === Update loop ===
 last_price = "---"
@@ -186,7 +199,6 @@ last_value = "---"
 last_time = "--:--:--"
 
 while True:
-    # Fetch price
     try:
         r = urequests.get(f'{base_url}/xrp')
         price_text = r.text.strip()
@@ -199,7 +211,6 @@ while True:
     except:
         pass
 
-    # Fetch time
     try:
         r = urequests.get(f'{base_url}/time')
         time_text = r.text.strip()
@@ -209,7 +220,7 @@ while True:
     except:
         pass
 
-    # Redraw
+    # Redraw everything
     set_window(0, 0, 159, 79)
     for _ in range(160 * 80):
         send_byte(0x00, 1)
