@@ -1,4 +1,4 @@
-# secondary.py - Bit-banged ST7735: 90° CCW rotation, fixed shift + upside-down letters, proxy on 9021
+# secondary.py - Bit-banged ST7735: 90° CCW rotation, fixed offsets/shift, better font, proxy on 9021
 import time
 import urequests
 import machine
@@ -49,7 +49,7 @@ send_command(0xC3, bytes([0x8A, 0x2A]))
 send_command(0xC4, bytes([0x8A, 0xEE]))
 send_command(0xC5, bytes([0x0E]))
 send_command(0x21)  # INVON
-send_command(0x36, bytes([0x60]))  # MADCTL for rotation
+send_command(0x36, bytes([0x60]))  # MADCTL: 90° clockwise (effective CCW with wiring + correct offsets)
 send_command(0xE0, bytes([0x02,0x1C,0x07,0x12,0x37,0x32,0x29,0x2D,0x29,0x25,0x2B,0x39,0x00,0x01,0x03,0x10]))
 send_command(0xE1, bytes([0x03,0x1D,0x07,0x06,0x2E,0x2C,0x29,0x2D,0x2E,0x2E,0x37,0x3F,0x00,0x00,0x02,0x10]))
 send_command(0x13)
@@ -57,10 +57,10 @@ time.sleep_ms(10)
 send_command(0x29)
 time.sleep_ms(100)
 
-# === Window (offsets tuned to eliminate fuzz/shift) ===
+# === Window (fixed offsets to eliminate shift/fuzz) ===
 def set_window(x0, y0, x1, y1):
-    send_command(0x2A, bytes([0, x0 + 2, 0, x1 + 2]))
-    send_command(0x2B, bytes([0, y0 + 24, 0, y1 + 24]))
+    send_command(0x2A, bytes([0, x0 + 2, 0, x1 + 2]))   # CASET +2 (eliminates left fuzz)
+    send_command(0x2B, bytes([0, y0 + 24, 0, y1 + 24]))  # RASET +24 (eliminates bottom fuzz/shift)
     send_command(0x2C)
 
 # === Fill black ===
@@ -69,10 +69,37 @@ for _ in range(160 * 80):
     send_byte(0x00, 1)
     send_byte(0x00, 1)
 
-# === Font (same as before, fixed letters are already good with new row order) ===
-font = { ... }  # (keep exactly the same as previous version)
+# === Improved font (fixed I thicker, L proper, A/E clearer, added V,U for VALUE/TIME) ===
+font = {
+    ' ': [0x00,0x00,0x00,0x00,0x00],
+    '0': [0x7C,0xA2,0x92,0x8A,0x7C],
+    '1': [0x00,0x42,0xFE,0x02,0x00],
+    '2': [0x42,0x86,0x8A,0x92,0x62],
+    '3': [0x84,0x82,0xA2,0xD2,0x8C],
+    '4': [0x18,0x28,0x48,0xFE,0x08],
+    '5': [0xE4,0xA2,0xA2,0xA2,0x9C],
+    '6': [0x3C,0x52,0x92,0x92,0x0C],
+    '7': [0x80,0x8E,0x90,0xA0,0xC0],
+    '8': [0x6C,0x92,0x92,0x92,0x6C],
+    '9': [0x60,0x92,0x92,0x94,0x78],
+    ':': [0x00,0x36,0x36,0x00,0x00],
+    '.': [0x00,0x00,0x00,0x06,0x06],
+    '$': [0x24,0x54,0xFE,0x54,0x48],
+    'M': [0xFE,0x40,0x30,0x40,0xFE],
+    'A': [0x7C,0x12,0x12,0x12,0x7C],  # Clear A
+    'C': [0x7C,0x82,0x82,0x82,0x44],
+    'E': [0xFE,0x92,0x92,0x92,0x82],  # Clear E with full top/bottom
+    'I': [0x00,0x82,0xFE,0x82,0x00],  # Thicker center bar
+    'L': [0xFE,0x02,0x02,0x02,0x02],  # Proper L
+    'V': [0xF8,0x04,0x02,0x04,0xF8],
+    'U': [0xFC,0x02,0x02,0x02,0xFC],
+    'T': [0x80,0x80,0xFE,0x80,0x80],
+    'X': [0xC6,0x28,0x10,0x28,0xC6],
+    'R': [0xFE,0x90,0x98,0x94,0x62],
+    'P': [0xFE,0x90,0x90,0x90,0x60],
+}
 
-# === Draw text (now with vertical flip fix for rotation) ===
+# === Draw text (shifted down/left for visibility) ===
 def draw_text(x_start, y_start, text):
     x = x_start
     for char in text.upper():
@@ -80,21 +107,18 @@ def draw_text(x_start, y_start, text):
             bitmap = font[char]
             for col in range(5):
                 bits = bitmap[col]
-                for row in range(7, -1, -1):  # Reversed row order to fix upside-down letters
-                    if bits & (1 << row):
-                        set_window(x + col, y_start + (7 - row), x + col, y_start + (7 - row))  # Adjusted to match flip
+                for row in range(8):
+                    if bits & (1 << (7 - row)):
+                        set_window(x + col, y_start + row, x + col, y_start + row)
                         send_byte(0xFF, 1)
                         send_byte(0xFF, 1)
         x += 6
-
-# === Shifted further left by 3 pixels ===
-# All draw_text calls now use x_start=7 (was 10)
 
 # === Get MAC ===
 mac_bytes = machine.unique_id()
 mac_str = ':'.join(['{:02X}'.format(b) for b in mac_bytes])
 
-# === Proxy on 9021 ===
+# === Proxy on port 9021 ===
 try:
     proxy_ip = open('/server_ip.txt').read().strip()
 except OSError:
@@ -102,19 +126,11 @@ except OSError:
 proxy_port = '9021'
 base_url = f'http://{proxy_ip}:{proxy_port}'
 
-# === Initial/redraw display (shifted left) ===
-def update_display():
-    set_window(0, 0, 159, 79)
-    for _ in range(160 * 80):
-        send_byte(0x00, 1)
-        send_byte(0x00, 1)
-
-    draw_text(7, 8, "MAC: " + mac_str)
-    draw_text(7, 22, "XRP: " + last_price)
-    draw_text(7, 36, "VAL: " + last_value)
-    draw_text(7, 50, "TIME: " + last_time + " CT")
-
-update_display()
+# === Initial display ===
+draw_text(10, 8, "MAC: " + mac_str)
+draw_text(10, 22, "XRP: ---")
+draw_text(10, 36, "VAL: ---")
+draw_text(10, 50, "TIME: --:--:-- CT")
 
 # === Update loop ===
 last_price = "---"
