@@ -1,4 +1,4 @@
-# secondary.py - Bit-banged ST7735: 90° CCW rotation, MAC + XRP price/value + Central Time from proxy
+# secondary.py - Bit-banged ST7735: 90° CCW rotation, fixed offsets/shift, better font, proxy on 9021
 import time
 import urequests
 import machine
@@ -49,7 +49,7 @@ send_command(0xC3, bytes([0x8A, 0x2A]))
 send_command(0xC4, bytes([0x8A, 0xEE]))
 send_command(0xC5, bytes([0x0E]))
 send_command(0x21)  # INVON
-send_command(0x36, bytes([0x60]))  # MADCTL: 90° clockwise (opposite of previous — now correct CCW effective with wiring)
+send_command(0x36, bytes([0x60]))  # MADCTL: 90° clockwise (effective CCW with wiring + correct offsets)
 send_command(0xE0, bytes([0x02,0x1C,0x07,0x12,0x37,0x32,0x29,0x2D,0x29,0x25,0x2B,0x39,0x00,0x01,0x03,0x10]))
 send_command(0xE1, bytes([0x03,0x1D,0x07,0x06,0x2E,0x2C,0x29,0x2D,0x2E,0x2E,0x37,0x3F,0x00,0x00,0x02,0x10]))
 send_command(0x13)
@@ -57,10 +57,10 @@ time.sleep_ms(10)
 send_command(0x29)
 time.sleep_ms(100)
 
-# === Window (160x80 after rotation, offsets for correct 90° CCW) ===
+# === Window (fixed offsets to eliminate shift/fuzz) ===
 def set_window(x0, y0, x1, y1):
-    send_command(0x2A, bytes([0, x0 + 26, 0, x1 + 26]))  # CASET
-    send_command(0x2B, bytes([0, y0 + 1, 0, y1 + 1]))    # RASET
+    send_command(0x2A, bytes([0, x0 + 2, 0, x1 + 2]))   # CASET +2 (eliminates left fuzz)
+    send_command(0x2B, bytes([0, y0 + 24, 0, y1 + 24]))  # RASET +24 (eliminates bottom fuzz/shift)
     send_command(0x2C)
 
 # === Fill black ===
@@ -69,7 +69,7 @@ for _ in range(160 * 80):
     send_byte(0x00, 1)
     send_byte(0x00, 1)
 
-# === Font (expanded) ===
+# === Improved font (fixed I thicker, L proper, A/E clearer, added V,U for VALUE/TIME) ===
 font = {
     ' ': [0x00,0x00,0x00,0x00,0x00],
     '0': [0x7C,0xA2,0x92,0x8A,0x7C],
@@ -86,17 +86,20 @@ font = {
     '.': [0x00,0x00,0x00,0x06,0x06],
     '$': [0x24,0x54,0xFE,0x54,0x48],
     'M': [0xFE,0x40,0x30,0x40,0xFE],
-    'A': [0x7C,0x12,0x12,0x12,0x7C],
+    'A': [0x7C,0x12,0x12,0x12,0x7C],  # Clear A
     'C': [0x7C,0x82,0x82,0x82,0x44],
+    'E': [0xFE,0x92,0x92,0x92,0x82],  # Clear E with full top/bottom
+    'I': [0x00,0x82,0xFE,0x82,0x00],  # Thicker center bar
+    'L': [0xFE,0x02,0x02,0x02,0x02],  # Proper L
+    'V': [0xF8,0x04,0x02,0x04,0xF8],
+    'U': [0xFC,0x02,0x02,0x02,0xFC],
+    'T': [0x80,0x80,0xFE,0x80,0x80],
     'X': [0xC6,0x28,0x10,0x28,0xC6],
     'R': [0xFE,0x90,0x98,0x94,0x62],
     'P': [0xFE,0x90,0x90,0x90,0x60],
-    'V': [0xF8,0x04,0x02,0x04,0xF8],
-    'T': [0x80,0x80,0xFE,0x80,0x80],
-    '-': [0x10,0x10,0x10,0x10,0x10],
 }
 
-# === Draw text ===
+# === Draw text (shifted down/left for visibility) ===
 def draw_text(x_start, y_start, text):
     x = x_start
     for char in text.upper():
@@ -115,19 +118,19 @@ def draw_text(x_start, y_start, text):
 mac_bytes = machine.unique_id()
 mac_str = ':'.join(['{:02X}'.format(b) for b in mac_bytes])
 
-# === Load proxy server (same as main but +1 port) ===
+# === Proxy on port 9021 ===
 try:
     proxy_ip = open('/server_ip.txt').read().strip()
 except OSError:
     proxy_ip = '108.254.1.184'
-proxy_port = '9021'  # Fixed offset
+proxy_port = '9021'
 base_url = f'http://{proxy_ip}:{proxy_port}'
 
 # === Initial display ===
-draw_text(5, 5, "MAC: " + mac_str)
-draw_text(5, 20, "XRP: ---")
-draw_text(5, 35, "VAL: ---")
-draw_text(5, 50, "TIME: --:--:-- CT")
+draw_text(10, 8, "MAC: " + mac_str)
+draw_text(10, 22, "XRP: ---")
+draw_text(10, 36, "VAL: ---")
+draw_text(10, 50, "TIME: --:--:-- CT")
 
 # === Update loop ===
 last_price = "---"
@@ -140,7 +143,7 @@ while True:
         r = urequests.get(f'{base_url}/xrp')
         price_text = r.text.strip()
         r.close()
-        if price_text != "error":
+        if price_text != "error" and price_text != "":
             price = float(price_text)
             last_price = f"${price:.4f}"
             value = price * 1.04225
@@ -153,7 +156,7 @@ while True:
         r = urequests.get(f'{base_url}/time')
         time_text = r.text.strip()
         r.close()
-        if time_text != "error":
+        if time_text != "error" and len(time_text) == 8:
             last_time = time_text
     except:
         pass
@@ -164,9 +167,9 @@ while True:
         send_byte(0x00, 1)
         send_byte(0x00, 1)
 
-    draw_text(5, 5, "MAC: " + mac_str)
-    draw_text(5, 20, "XRP: " + last_price)
-    draw_text(5, 35, "VAL: " + last_value)
-    draw_text(5, 50, "TIME: " + last_time + " CT")
+    draw_text(10, 8, "MAC: " + mac_str)
+    draw_text(10, 22, "XRP: " + last_price)
+    draw_text(10, 36, "VAL: " + last_value)
+    draw_text(10, 50, "TIME: " + last_time + " CT")
 
     time.sleep(30)
