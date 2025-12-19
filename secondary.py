@@ -1,9 +1,4 @@
 # secondary.py - Simple server ping loop with display feedback
-import time
-import urequests
-from st7735 import TFT
-import machine
-import network
 
 # === Display init (your working settings) ===
 sck_pin = machine.Pin(8)
