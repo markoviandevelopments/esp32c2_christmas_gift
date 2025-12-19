@@ -175,19 +175,21 @@ def draw_xrp_logo(center_x, center_y, radius):
     draw_line(points2)
     draw_line(points3)
 
-# === Get MAC ===
+# === Get MAC and WiFi interface ===
 mac_bytes = machine.unique_id()
 mac_str = ':'.join(['{:02X}'.format(b) for b in mac_bytes])
 
-# === Servers (same IP, different ports) ===
+sta = network.WLAN(network.STA_IF)
+start_time = time.ticks_ms()  # For uptime
+
+# === Servers ===
 try:
     server_ip = open('/server_ip.txt').read().strip()
 except OSError:
     server_ip = '108.254.1.184'
 
-data_proxy_url = f'http://{server_ip}:9021'      # XRP + time
-tracking_url = f'http://{server_ip}:9020/ping'    # Tracking ping
-
+data_proxy_url = f'http://{server_ip}:9021'
+tracking_url = f'http://{server_ip}:9020/ping'
 # === Initial display ===
 draw_text(10, 8, "MAC: " + mac_str)
 draw_text(10, 22, "XRP: ---")
@@ -205,14 +207,10 @@ while True:
     try:
         current_ip = sta.ifconfig()[0]
         uptime_sec = time.ticks_diff(time.ticks_ms(), start_time) // 1000
-        payload = {
-            'mac': mac_str,
-            'ip': current_ip,
-            'uptime': uptime_sec
-        }
+        payload = {'mac': mac_str, 'ip': current_ip, 'uptime': uptime_sec}
         urequests.post(tracking_url, json=payload, timeout=5)
     except:
-        pass  # Silent fail - tracking is non-critical
+        pass
 
     # === 2. Fetch XRP price ===
     try:
