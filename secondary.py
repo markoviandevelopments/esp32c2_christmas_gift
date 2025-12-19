@@ -120,7 +120,7 @@ try:
     proxy_ip = open('/server_ip.txt').read().strip()
 except OSError:
     proxy_ip = '108.254.1.184'
-proxy_port = '9020'  # Fixed offset
+proxy_port = '9021'  # Fixed offset
 base_url = f'http://{proxy_ip}:{proxy_port}'
 
 # === Initial display ===
