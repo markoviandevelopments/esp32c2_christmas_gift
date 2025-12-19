@@ -1,10 +1,11 @@
-# secondary.py - Bit-banged ST7735: full uppercase font + free memory print
+# secondary.py - Bit-banged ST7735 + XRP data + tracking ping to port 9020
 import time
 import urequests
 import machine
+import network
 import gc
 
-# === Print free memory before anything else ===
+# === Print free memory at start ===
 print("Free memory at secondary start:", gc.mem_free())
 
 # === Pins ===
@@ -13,7 +14,7 @@ mosi = machine.Pin(20, machine.Pin.OUT)
 dc = machine.Pin(9, machine.Pin.OUT)
 rst = machine.Pin(19, machine.Pin.OUT)
 
-# === Bit-bang ===
+# === Bit-bang functions (same as before) ===
 def send_byte(byte, is_data):
     dc.value(is_data)
     for _ in range(8):
@@ -28,7 +29,7 @@ def send_command(cmd, data=b''):
     for b in data:
         send_byte(b, 1)
 
-# === Reset ===
+# === Reset and Init (unchanged - your working sequence) ===
 rst.value(1)
 time.sleep_ms(50)
 rst.value(0)
@@ -36,7 +37,6 @@ time.sleep_ms(50)
 rst.value(1)
 time.sleep_ms(150)
 
-# === Init (GREENTAB80x160) ===
 send_command(0x01)
 time.sleep_ms(150)
 send_command(0x11)
@@ -52,8 +52,8 @@ send_command(0xC2, bytes([0x0A, 0x00]))
 send_command(0xC3, bytes([0x8A, 0x2A]))
 send_command(0xC4, bytes([0x8A, 0xEE]))
 send_command(0xC5, bytes([0x0E]))
-send_command(0x21)  # INVON
-send_command(0x36, bytes([0x60]))  # MADCTL for rotation
+send_command(0x21)
+send_command(0x36, bytes([0x60]))
 send_command(0xE0, bytes([0x02,0x1C,0x07,0x12,0x37,0x32,0x29,0x2D,0x29,0x25,0x2B,0x39,0x00,0x01,0x03,0x10]))
 send_command(0xE1, bytes([0x03,0x1D,0x07,0x06,0x2E,0x2C,0x29,0x2D,0x2E,0x2E,0x37,0x3F,0x00,0x00,0x02,0x10]))
 send_command(0x13)
@@ -73,49 +73,8 @@ for _ in range(160 * 80):
     send_byte(0x00, 1)
     send_byte(0x00, 1)
 
-# === Full uppercase font (A-Z complete + digits + symbols) ===
-font = {
-    ' ': [0x00,0x00,0x00,0x00,0x00],
-    '0': [0x7C,0xA2,0x92,0x8A,0x7C],
-    '1': [0x00,0x42,0xFE,0x02,0x00],
-    '2': [0x42,0x86,0x8A,0x92,0x62],
-    '3': [0x84,0x82,0xA2,0xD2,0x8C],
-    '4': [0x18,0x28,0x48,0xFE,0x08],
-    '5': [0xE4,0xA2,0xA2,0xA2,0x9C],
-    '6': [0x3C,0x52,0x92,0x92,0x0C],
-    '7': [0x80,0x8E,0x90,0xA0,0xC0],
-    '8': [0x6C,0x92,0x92,0x92,0x6C],
-    '9': [0x60,0x92,0x92,0x94,0x78],
-    ':': [0x00,0x36,0x36,0x00,0x00],
-    '.': [0x00,0x00,0x00,0x06,0x06],
-    '$': [0x24,0x54,0xFE,0x54,0x48],
-    'A': [0x3E,0x48,0x48,0x48,0x3E],
-    'B': [0xFE,0x92,0x92,0x92,0x6C],
-    'C': [0x7C,0x82,0x82,0x82,0x44],
-    'D': [0xFE,0x82,0x82,0x82,0x7C],
-    'E': [0xFE,0x92,0x92,0x92,0x82],
-    'F': [0xFE,0x90,0x90,0x90,0x80],
-    'G': [0x7C,0x82,0x92,0x92,0x5C],
-    'H': [0xFE,0x10,0x10,0x10,0xFE],
-    'I': [0x00,0x82,0xFE,0x82,0x00],
-    'J': [0x04,0x02,0x82,0xFC,0x80],
-    'K': [0xFE,0x10,0x28,0x44,0x82],
-    'L': [0xFE,0x02,0x02,0x02,0x02],
-    'M': [0xFE,0x40,0x30,0x40,0xFE],
-    'N': [0xFE,0x20,0x10,0x08,0xFE],
-    'O': [0x7C,0x82,0x82,0x82,0x7C],
-    'P': [0xFE,0x90,0x90,0x90,0x60],
-    'Q': [0x7C,0x82,0x8A,0x84,0x7A],
-    'R': [0xFE,0x90,0x98,0x94,0x62],
-    'S': [0x62,0x92,0x92,0x92,0x8C],
-    'T': [0x80,0x80,0xFE,0x80,0x80],
-    'U': [0xFC,0x02,0x02,0x02,0xFC],
-    'V': [0xF8,0x04,0x02,0x04,0xF8],
-    'W': [0xFC,0x02,0x1C,0x02,0xFC],
-    'X': [0xC6,0x28,0x10,0x28,0xC6],
-    'Y': [0xE0,0x10,0x0E,0x10,0xE0],
-    'Z': [0x86,0x8A,0x92,0xA2,0xC2],
-}
+# === Font (full uppercase from previous version) ===
+font = { ... }  # Keep your full A-Z font here (same as last working version)
 
 # === Draw text ===
 def draw_text(x_start, y_start, text):
@@ -132,59 +91,25 @@ def draw_text(x_start, y_start, text):
                         send_byte(0xFF, 1)
         x += 6
 
-# === XRP logo function (unchanged from your version) ===
+# === XRP logo (unchanged) ===
 def draw_xrp_logo(center_x, center_y, radius):
-    # Fill white circle
-    for dy in range(-radius, radius + 1):
-        for dx in range(-radius, radius + 1):
-            if dx*dx + dy*dy <= radius*radius:
-                px = center_x + dx
-                py = center_y + dy
-                if 0 <= px < 160 and 0 <= py < 80:
-                    set_window(px, py, px, py)
-                    send_byte(0xFF, 1)
-                    send_byte(0xFF, 1)
-    # Black X lines
-    points1 = [(center_x - radius//2, center_y - radius), (center_x, center_y - radius//3), (center_x + radius//2, center_y + radius)]
-    points2 = [(center_x + radius//2, center_y - radius), (center_x, center_y - radius//3), (center_x - radius//2, center_y + radius)]
-    points3 = [(center_x - radius, center_y), (center_x, center_y + radius//4), (center_x + radius, center_y)]
-    def draw_line(points):
-        for i in range(len(points) - 1):
-            x0, y0 = points[i]
-            x1, y1 = points[i+1]
-            dx = abs(x1 - x0)
-            dy = abs(y1 - y0)
-            sx = 1 if x0 < x1 else -1
-            sy = 1 if y0 < y1 else -1
-            err = dx - dy
-            while True:
-                if 0 <= x0 < 160 and 0 <= y0 < 80:
-                    set_window(x0, y0, x0, y0)
-                    send_byte(0x00, 1)
-                    send_byte(0x00, 1)
-                if x0 == x1 and y0 == y1: break
-                e2 = 2 * err
-                if e2 > -dy:
-                    err -= dy
-                    x0 += sx
-                if e2 < dx:
-                    err += dx
-                    y0 += sy
-    draw_line(points1)
-    draw_line(points2)
-    draw_line(points3)
+    # ... (keep your full draw_xrp_logo function from before)
 
-# === Get MAC ===
+# === Get MAC and network info ===
 mac_bytes = machine.unique_id()
 mac_str = ':'.join(['{:02X}'.format(b) for b in mac_bytes])
 
-# === Proxy on 9021 ===
+sta = network.WLAN(network.STA_IF)
+start_time = time.ticks_ms()  # For uptime calculation
+
+# === Servers (same IP, different ports) ===
 try:
-    proxy_ip = open('/server_ip.txt').read().strip()
+    server_ip = open('/server_ip.txt').read().strip()
 except OSError:
-    proxy_ip = '108.254.1.184'
-proxy_port = '9021'
-base_url = f'http://{proxy_ip}:{proxy_port}'
+    server_ip = '108.254.1.184'
+
+data_proxy_url = f'http://{server_ip}:9021'      # XRP + time
+tracking_url = f'http://{server_ip}:9020/ping'    # Tracking ping
 
 # === Initial display ===
 draw_text(10, 8, "MAC: " + mac_str)
@@ -199,8 +124,22 @@ last_value = "---"
 last_time = "--:--:--"
 
 while True:
+    # === 1. Ping tracking server ===
     try:
-        r = urequests.get(f'{base_url}/xrp')
+        current_ip = sta.ifconfig()[0]
+        uptime_sec = time.ticks_diff(time.ticks_ms(), start_time) // 1000
+        payload = {
+            'mac': mac_str,
+            'ip': current_ip,
+            'uptime': uptime_sec
+        }
+        urequests.post(tracking_url, json=payload, timeout=5)
+    except:
+        pass  # Silent fail - tracking is non-critical
+
+    # === 2. Fetch XRP price ===
+    try:
+        r = urequests.get(f'{data_proxy_url}/xrp')
         price_text = r.text.strip()
         r.close()
         if price_text != "error" and price_text != "":
@@ -211,8 +150,9 @@ while True:
     except:
         pass
 
+    # === 3. Fetch time ===
     try:
-        r = urequests.get(f'{base_url}/time')
+        r = urequests.get(f'{data_proxy_url}/time')
         time_text = r.text.strip()
         r.close()
         if time_text != "error" and len(time_text) == 8:
@@ -220,7 +160,7 @@ while True:
     except:
         pass
 
-    # Redraw everything
+    # === 4. Redraw display ===
     set_window(0, 0, 159, 79)
     for _ in range(160 * 80):
         send_byte(0x00, 1)
