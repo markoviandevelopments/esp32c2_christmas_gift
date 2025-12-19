@@ -114,6 +114,54 @@ def draw_text(x_start, y_start, text):
                         send_byte(0xFF, 1)
         x += 6
 
+# === Draw simple XRP logo (white circle with black X lines inside) ===
+def draw_xrp_logo(center_x, center_y, radius):
+    # Fill white circle (simple raster fill - good enough for small radius)
+    for dy in range(-radius, radius + 1):
+        for dx in range(-radius, radius + 1):
+            if dx*dx + dy*dy <= radius*radius:
+                px = center_x + dx
+                py = center_y + dy
+                if 0 <= px < 160 and 0 <= py < 80:
+                    set_window(px, py, px, py)
+                    send_byte(0xFF, 1)  # White high
+                    send_byte(0xFF, 1)  # White low
+
+    # Draw three black curved lines (approximated as straight segments for speed)
+    # Line 1: top-left to bottom-right curve
+    points1 = [(center_x - radius//2, center_y - radius), (center_x, center_y - radius//3), (center_x + radius//2, center_y + radius)]
+    # Line 2: top-right to bottom-left curve
+    points2 = [(center_x + radius//2, center_y - radius), (center_x, center_y - radius//3), (center_x - radius//2, center_y + radius)]
+    # Line 3: middle horizontal curve (slight arc)
+    points3 = [(center_x - radius, center_y), (center_x, center_y + radius//4), (center_x + radius, center_y)]
+
+    def draw_line(points):
+        for i in range(len(points) - 1):
+            x0, y0 = points[i]
+            x1, y1 = points[i+1]
+            dx = abs(x1 - x0)
+            dy = abs(y1 - y0)
+            sx = 1 if x0 < x1 else -1
+            sy = 1 if y0 < y1 else -1
+            err = dx - dy
+            while True:
+                if 0 <= x0 < 160 and 0 <= y0 < 80:
+                    set_window(x0, y0, x0, y0)
+                    send_byte(0x00, 1)  # Black high
+                    send_byte(0x00, 1)  # Black low
+                if x0 == x1 and y0 == y1: break
+                e2 = 2 * err
+                if e2 > -dy:
+                    err -= dy
+                    x0 += sx
+                if e2 < dx:
+                    err += dx
+                    y0 += sy
+
+    draw_line(points1)
+    draw_line(points2)
+    draw_line(points3)
+
 # === Get MAC ===
 mac_bytes = machine.unique_id()
 mac_str = ':'.join(['{:02X}'.format(b) for b in mac_bytes])
@@ -171,5 +219,6 @@ while True:
     draw_text(10, 22, "XRP: " + last_price)
     draw_text(10, 36, "VAL: " + last_value)
     draw_text(10, 50, "TIME: " + last_time + " CT")
+    draw_xrp_logo(40, 30, 20)
 
     time.sleep(30)
