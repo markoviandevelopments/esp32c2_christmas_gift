@@ -219,6 +219,6 @@ while True:
     draw_text(10, 22, "XRP: " + last_price)
     draw_text(10, 36, "VAL: " + last_value)
     draw_text(10, 50, "TIME: " + last_time + " CT")
-    draw_xrp_logo(150, 50, 10)
+    draw_xrp_logo(140, 40, 10)
 
     time.sleep(30)
