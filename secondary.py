@@ -248,48 +248,61 @@ last_value = "---"
 last_time = "--:--:--"
 
 while True:
-    # Tracking ping
-    try:
-        current_ip = sta.ifconfig()[0]
-        uptime_sec = time.ticks_diff(time.ticks_ms(), start_time) // 1000
-        payload = {'mac': mac_str, 'ip': current_ip, 'uptime': uptime_sec}
-        urequests.post(tracking_url, json=payload, timeout=5)
-    except:
-        pass
+    current_time = time.ticks_ms()
 
-    # Fetch price
-    try:
-        r = urequests.get(f'{data_proxy_url}/{coin_endpoint}')
-        price_text = r.text.strip()
-        r.close()
-        if price_text != "error" and price_text != "":
-            price = float(price_text)
-            last_price = f"${price}"
-            value = price * amount
-            last_value = f"${value:.8f}" if coin == 'BTC' else f"${value:.2f}" if coin in ['SOL', 'LTC'] else f"${value:.6f}" if coin == 'DOGE' else f"${value}"
-    except:
-        pass
+    # === Reboot every 30 minutes ===
+    if time.ticks_diff(current_time, start_time) >= reboot_interval:
+        print("30 minutes reached - rebooting for updates...")
+        time.sleep(1)
+        machine.reset()
 
-    # Fetch time
-    try:
-        r = urequests.get(f'{data_proxy_url}/time')
-        time_text = r.text.strip()
-        r.close()
-        if time_text != "error" and len(time_text) == 8:
-            last_time = time_text
-    except:
-        pass
+    # === Update display every 1 minute ===
+    if time.ticks_diff(current_time, last_update) >= update_interval:
+        last_update = current_time
 
-    # Redraw
-    set_window(0, 0, 159, 79)
-    for _ in range(160 * 80):
-        send_byte(0x00, 1)
-        send_byte(0x00, 1)
+        # Tracking ping
+        try:
+            current_ip = sta.ifconfig()[0]
+            uptime_sec = time.ticks_diff(current_time, start_time) // 1000
+            payload = {'mac': mac_str, 'ip': current_ip, 'uptime': uptime_sec}
+            urequests.post(tracking_url, json=payload, timeout=5)
+        except:
+            pass
 
-    draw_text(10, 8, "MAC: " + mac_str)
-    draw_text(10, 22, f"{coin}: " + last_price)
-    draw_text(10, 36, "VAL: " + last_value)
-    draw_text(10, 50, "TIME: " + last_time + " CT")
-    draw_coin_logo(120, 30)
+        # Fetch price
+        try:
+            r = urequests.get(f'{data_proxy_url}/{coin_endpoint}')
+            price_text = r.text.strip()
+            r.close()
+            if price_text != "error" and price_text != "":
+                price = float(price_text)
+                last_price = f"${price}"
+                value = price * amount
+                last_value = f"${value:.8f}" if coin == 'BTC' else f"${value:.2f}" if coin in ['SOL', 'LTC'] else f"${value:.6f}" if coin == 'DOGE' else f"${value}"
+        except:
+            pass
 
-    time.sleep(30)
+        # Fetch time
+        try:
+            r = urequests.get(f'{data_proxy_url}/time')
+            time_text = r.text.strip()
+            r.close()
+            if time_text != "error" and len(time_text) == 8:
+                last_time = time_text
+        except:
+            pass
+
+        # Redraw
+        set_window(0, 0, 159, 79)
+        for _ in range(160 * 80):
+            send_byte(0x00, 1)
+            send_byte(0x00, 1)
+
+        draw_text(10, 8, "MAC: " + mac_str)
+        draw_text(10, 22, f"{coin}: " + last_price)
+        draw_text(10, 36, "VAL: " + last_value)
+        draw_text(10, 50, "TIME: " + last_time + " CT")
+        draw_coin_logo(120, 30)
+
+    # Small sleep to avoid busy loop
+    time.sleep_ms(100)
