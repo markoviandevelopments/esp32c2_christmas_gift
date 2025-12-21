@@ -1,28 +1,24 @@
-# proxy_server.py - Cached proxy for prices, time, and coin logos (5 min cache)
-from flask import Flask, send_file, Response
+# proxy_server.py - Cached proxy for prices, time, and RGB565 logos
+from flask import Flask
 import requests
 import threading
 import time
-import io
 from PIL import Image
+import io
 
 app = Flask(__name__)
 
 # Cached data
-cached_prices = {
-    'btc': "error",
-    'sol': "error",
-    'doge': "error",
-    'pepe': "error",
-    'xrp': "error",
-    'ltc': "error"
-}
+cached_prices = { 'btc': "error", 'sol': "error", 'doge': "error", 'pepe': "error", 'xrp': "error", 'ltc': "error" }
 cached_time = "error"
-cached_logos = {}  # coin -> resized PNG bytes
+cached_logos = {}  # coin -> "0xFFFF,0x0000,..." string
 last_fetch_time = 0
 CACHE_SECONDS = 300
 
 lock = threading.Lock()
+
+def rgb565(r, g, b):
+    return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
 
 def fetch_data():
     global cached_prices, cached_time, cached_logos, last_fetch_time
@@ -51,7 +47,7 @@ def fetch_data():
         except:
             pass
 
-        # Logos (download and resize to 20x20 for your display size)
+        # Logos (20x20 RGB565 hex array)
         logo_urls = {
             'btc': 'https://cryptologos.cc/logos/bitcoin-btc-logo.png',
             'sol': 'https://cryptologos.cc/logos/solana-sol-logo.png',
@@ -64,13 +60,16 @@ def fetch_data():
             try:
                 r = requests.get(url, timeout=10)
                 r.raise_for_status()
-                img = Image.open(io.BytesIO(r.content))
+                img = Image.open(io.BytesIO(r.content)).convert('RGB')
                 img = img.resize((20, 20), Image.LANCZOS)
-                buf = io.BytesIO()
-                img.save(buf, format='PNG')
-                cached_logos[coin] = buf.getvalue()
+                pixels = []
+                for y in range(20):
+                    for x in range(20):
+                        r, g, b = img.getpixel((x, y))
+                        pixels.append(f"0x{rgb565(r,g,b):04X}")
+                cached_logos[coin] = ','.join(pixels)
             except:
-                cached_logos[coin] = None  # Failed
+                cached_logos[coin] = "error"
 
         with lock:
             last_fetch_time = time.time()
@@ -93,11 +92,10 @@ def get_central_time():
 def get_logo(coin):
     coin = coin.lower()
     with lock:
-        logo_bytes = cached_logos.get(coin)
-        if logo_bytes:
-            return Response(logo_bytes, mimetype='image/png')
-        else:
+        logo_data = cached_logos.get(coin, "error")
+        if logo_data == "error":
             return "error", 404
+        return logo_data
 
 @app.route('/')
 def index():
@@ -105,5 +103,5 @@ def index():
 
 if __name__ == '__main__':
     threading.Thread(target=fetch_data, daemon=True).start()
-    print("Cached proxy with logos starting on http://0.0.0.0:9021")
+    print("Proxy with RGB565 logos starting on http://0.0.0.0:9021")
     app.run(host='0.0.0.0', port=9021)
