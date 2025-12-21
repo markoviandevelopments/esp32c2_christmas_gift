@@ -180,22 +180,30 @@ mac_bytes = machine.unique_id()
 mac_str = ':'.join(['{:02X}'.format(b) for b in mac_bytes])
 
 # === Check which device ===
-is_special_mac = (mac_str == '34:98:7A:07:11:24')
-coin = "LTC" if is_special_mac else "XRP"
-amount = 0.02589512 if is_special_mac else 1.04225
-coin_endpoint = "ltc" if is_special_mac else "xrp"
+device_config = {
+    '34:98:7A:07:14:D0': {'coin': 'BTC', 'amount': 0.0000566, 'endpoint': 'btc'},
+    '34:98:7A:07:13:B4': {'coin': 'SOL', 'amount': 0.025033, 'endpoint': 'sol'},
+    '34:98:7A:06:FC:A0': {'coin': 'DOGE', 'amount': 16.93723136, 'endpoint': 'doge'},
+    '34:98:7A:06:FB:D0': {'coin': 'PEPE', 'amount': 499345.44795525, 'endpoint': 'pepe'},
+    '34:98:7A:07:11:24': {'coin': 'LTC', 'amount': 0.02589512, 'endpoint': 'ltc'},
+}
+
+config = device_config.get(mac_str, {'coin': 'XRP', 'amount': 1.042248, 'endpoint': 'xrp'})
+coin = config['coin']
+amount = config['amount']
+coin_endpoint = config['endpoint']
 
 sta = network.WLAN(network.STA_IF)
-start_time = time.ticks_ms()  # For uptime
+start_time = time.ticks_ms()
 
-# === Servers ===
+# === Proxy ===
 try:
     server_ip = open('/server_ip.txt').read().strip()
 except OSError:
     server_ip = '108.254.1.184'
-
 data_proxy_url = f'http://{server_ip}:9021'
 tracking_url = f'http://{server_ip}:9020/ping'
+
 # === Initial display ===
 draw_text(10, 8, "MAC: " + mac_str)
 draw_text(10, 22, f"{coin}: ---")
@@ -209,7 +217,7 @@ last_value = "---"
 last_time = "--:--:--"
 
 while True:
-    # === Tracking ping ===
+    # Tracking ping
     try:
         current_ip = sta.ifconfig()[0]
         uptime_sec = time.ticks_diff(time.ticks_ms(), start_time) // 1000
@@ -218,20 +226,20 @@ while True:
     except:
         pass
 
-    # === Fetch coin price ===
+    # Fetch price
     try:
         r = urequests.get(f'{data_proxy_url}/{coin_endpoint}')
         price_text = r.text.strip()
         r.close()
         if price_text != "error" and price_text != "":
             price = float(price_text)
-            last_price = f"${price:.4f}"
+            last_price = f"${price}"
             value = price * amount
-            last_value = f"${value:.2f}"
+            last_value = f"${value:.8f}" if coin == 'BTC' else f"${value:.2f}" if coin in ['SOL', 'LTC'] else f"${value:.6f}" if coin == 'DOGE' else f"${value}"
     except:
         pass
 
-    # === Fetch time ===
+    # Fetch time
     try:
         r = urequests.get(f'{data_proxy_url}/time')
         time_text = r.text.strip()
@@ -241,7 +249,7 @@ while True:
     except:
         pass
 
-    # === Redraw ===
+    # Redraw
     set_window(0, 0, 159, 79)
     for _ in range(160 * 80):
         send_byte(0x00, 1)
