@@ -179,6 +179,12 @@ def draw_xrp_logo(center_x, center_y, radius):
 mac_bytes = machine.unique_id()
 mac_str = ':'.join(['{:02X}'.format(b) for b in mac_bytes])
 
+# === Check which device ===
+is_special_mac = (mac_str == '34:98:7A:07:11:24')
+coin = "LTC" if is_special_mac else "XRP"
+amount = 0.02589512 if is_special_mac else 1.04225
+coin_endpoint = "ltc" if is_special_mac else "xrp"
+
 sta = network.WLAN(network.STA_IF)
 start_time = time.ticks_ms()  # For uptime
 
@@ -192,7 +198,7 @@ data_proxy_url = f'http://{server_ip}:9021'
 tracking_url = f'http://{server_ip}:9020/ping'
 # === Initial display ===
 draw_text(10, 8, "MAC: " + mac_str)
-draw_text(10, 22, "XRP: ---")
+draw_text(10, 22, f"{coin}: ---")
 draw_text(10, 36, "VAL: ---")
 draw_text(10, 50, "TIME: --:--:-- CT")
 draw_xrp_logo(140, 40, 10)
@@ -203,7 +209,7 @@ last_value = "---"
 last_time = "--:--:--"
 
 while True:
-    # === 1. Ping tracking server ===
+    # === Tracking ping ===
     try:
         current_ip = sta.ifconfig()[0]
         uptime_sec = time.ticks_diff(time.ticks_ms(), start_time) // 1000
@@ -212,20 +218,20 @@ while True:
     except:
         pass
 
-    # === 2. Fetch XRP price ===
+    # === Fetch coin price ===
     try:
-        r = urequests.get(f'{data_proxy_url}/xrp')
+        r = urequests.get(f'{data_proxy_url}/{coin_endpoint}')
         price_text = r.text.strip()
         r.close()
         if price_text != "error" and price_text != "":
             price = float(price_text)
             last_price = f"${price:.4f}"
-            value = price * 1.04225
+            value = price * amount
             last_value = f"${value:.2f}"
     except:
         pass
 
-    # === 3. Fetch time ===
+    # === Fetch time ===
     try:
         r = urequests.get(f'{data_proxy_url}/time')
         time_text = r.text.strip()
@@ -235,14 +241,14 @@ while True:
     except:
         pass
 
-    # === 4. Redraw display ===
+    # === Redraw ===
     set_window(0, 0, 159, 79)
     for _ in range(160 * 80):
         send_byte(0x00, 1)
         send_byte(0x00, 1)
 
     draw_text(10, 8, "MAC: " + mac_str)
-    draw_text(10, 22, "XRP: " + last_price)
+    draw_text(10, 22, f"{coin}: " + last_price)
     draw_text(10, 36, "VAL: " + last_value)
     draw_text(10, 50, "TIME: " + last_time + " CT")
     draw_xrp_logo(140, 40, 10)
