@@ -226,6 +226,10 @@ coin_endpoint = config['endpoint']
 
 sta = network.WLAN(network.STA_IF)
 start_time = time.ticks_ms()
+# === Timers ===
+reboot_interval = 30 * 60 * 1000  # 30 minutes
+update_interval = 60 * 1000       # 1 minute
+last_update = time.ticks_ms()     # Initialize update timer
 
 # === Proxy ===
 try:
