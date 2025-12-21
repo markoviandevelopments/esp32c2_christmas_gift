@@ -133,6 +133,37 @@ def draw_text(x_start, y_start, text):
                         send_byte(0xFF, 1)
         x += 6
 
+
+# === Coin logo cache ===
+cached_logo_pixels = None
+
+# === Draw coin logo from cached RGB565 array (20x20) ===
+def draw_coin_logo(x, y):
+    global cached_logo_pixels
+    if cached_logo_pixels is None:
+        try:
+            r = urequests.get(f'{data_proxy_url}/logo/{coin_endpoint}')
+            if r.status_code == 200:
+                text = r.text.strip()
+                if text != "error":
+                    cached_logo_pixels = [int(p, 16) for p in text.split(',')]
+            r.close()
+        except:
+            cached_logo_pixels = []  # Failed
+
+    if cached_logo_pixels and len(cached_logo_pixels) == 400:  # 20x20
+        idx = 0
+        for py in range(20):
+            for px in range(20):
+                color = cached_logo_pixels[idx]
+                idx += 1
+                set_window(x + px, y + py, x + px, y + py)
+                send_byte(color >> 8, 1)  # High byte
+                send_byte(color & 0xFF, 1)  # Low byte
+    else:
+        # Fallback placeholder circle if no logo
+        draw_xrp_logo(x + 10, y + 10, 10)
+
 # === XRP logo function (unchanged from your version) ===
 def draw_xrp_logo(center_x, center_y, radius):
     # Fill white circle
@@ -209,7 +240,7 @@ draw_text(10, 8, "MAC: " + mac_str)
 draw_text(10, 22, f"{coin}: ---")
 draw_text(10, 36, "VAL: ---")
 draw_text(10, 50, "TIME: --:--:-- CT")
-draw_xrp_logo(140, 40, 10)
+draw_coin_logo(120, 30)
 
 # === Update loop ===
 last_price = "---"
@@ -259,6 +290,6 @@ while True:
     draw_text(10, 22, f"{coin}: " + last_price)
     draw_text(10, 36, "VAL: " + last_value)
     draw_text(10, 50, "TIME: " + last_time + " CT")
-    draw_xrp_logo(140, 40, 10)
+    draw_coin_logo(120, 30)
 
     time.sleep(30)
