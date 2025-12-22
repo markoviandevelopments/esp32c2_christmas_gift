@@ -242,24 +242,28 @@ last_price = "---"
 last_value = "---"
 last_time = "--:--:--"
 
+# Tracking ping - FIXED with manual JSON + header
 try:
-    r = urequests.get(f'{data_proxy_url}/{coin_endpoint}', timeout=10)
-    price_text = r.text.strip()
-    r.close()
-    if price_text != "error":
-        price = float(price_text)
-        last_price = f"${price}"
-        value = price * amount
-        last_value = f"${value:.8f}" if coin == 'BTC' else f"${value:.2f}" if coin in ['SOL', 'LTC'] else f"${value:.6f}" if coin == 'DOGE' else f"${value}"
-except:
-    pass
-
-try:
-    r = urequests.get(f'{data_proxy_url}/time', timeout=10)
-    time_text = r.text.strip()
-    r.close()
-    if time_text != "error" and len(time_text) == 8:
-        last_time = time_text
+    current_ip = sta.ifconfig()[0]
+    uptime_sec = time.ticks_diff(current_time, start_time) // 1000
+   
+    payload = {
+        'mac': mac_str,
+        'ip': current_ip,
+        'uptime': uptime_sec,
+        'coin': coin,
+        'price': last_price,
+        'value': last_value,
+        'free_ram': gc.mem_free(),
+        'alloc_ram': gc.mem_alloc(),
+        'total_ram': gc.mem_free() + gc.mem_alloc()
+    }
+   
+    json_data = ujson.dumps(payload)
+    headers = {'Content-Type': 'application/json'}
+   
+    urequests.post(tracking_url, data=json_data, headers=headers, timeout=15)
+   
 except:
     pass
 
@@ -286,10 +290,11 @@ while True:
 
     # Update every 60 seconds
     # Tracking ping
+    # Tracking ping - FIXED with manual JSON + header
     try:
         current_ip = sta.ifconfig()[0]
         uptime_sec = time.ticks_diff(current_time, start_time) // 1000
-        
+       
         payload = {
             'mac': mac_str,
             'ip': current_ip,
@@ -301,15 +306,28 @@ while True:
             'alloc_ram': gc.mem_alloc(),
             'total_ram': gc.mem_free() + gc.mem_alloc()
         }
-        
+       
         json_data = ujson.dumps(payload)
         headers = {'Content-Type': 'application/json'}
-        
+       
         urequests.post(tracking_url, data=json_data, headers=headers, timeout=15)
-        
-    except Exception as e:
+       
+    except:
         pass
 
+    # Fetch price - now updates every minute
+    try:
+        r = urequests.get(f'{data_proxy_url}/{coin_endpoint}', timeout=10)
+        price_text = r.text.strip()
+        r.close()
+        if price_text != "error":
+            price = float(price_text)
+            last_price = f"${price}"
+            value = price * amount
+            last_value = f"${value:.8f}" if coin == 'BTC' else f"${value:.2f}" if coin in ['SOL', 'LTC'] else f"${value:.6f}" if coin == 'DOGE' else f"${value}"
+    except:
+        pass
+    
     # Fetch time
     try:
         r = urequests.get(f'{data_proxy_url}/time', timeout=10)
@@ -332,9 +350,9 @@ while True:
     draw_text(10, 50, "TIME: " + last_time + " CT")
     draw_coin_logo(120, 30)
 
-    current_time = time.ticks_ms()
-    while (time.ticks_diff(time.ticks_ms(), current_time) < 60000): 
-        pass  # Idle wait for ~60 seconds - no busy CPU spin, WiFi stays healthy
+    current_time = time.ticks_ms()  # Reset timer after redraw
     it_C += 1
+    while time.ticks_diff(time.ticks_ms(), current_time) < 60000:
+        pass  # Accurate ~60-second idle delay - WiFi stays fully connected and healthy
     # Small sleep to avoid busy loop
     time.sleep_ms(100)
