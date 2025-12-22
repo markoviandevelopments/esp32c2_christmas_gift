@@ -11,7 +11,7 @@ app = Flask(__name__)
 
 # Directories and files
 LOGO_DIR = "logos"
-os.makedirs(LOGO_DIR, exist_ok=True)  # Create folder if not exists
+os.makedirs(LOGO_DIR, exist_ok=True)
 
 # Cached data
 cached_prices = { 'btc': "error", 'sol': "error", 'doge': "error", 'pepe': "error", 'xrp': "error", 'ltc': "error" }
@@ -19,7 +19,6 @@ cached_time = "error"
 cached_logos = {}  # coin -> "0xFFFF,0x0000,..." string
 last_fetch_time = 0
 CACHE_SECONDS = 300
-
 lock = threading.Lock()
 
 def rgb565(r, g, b):
@@ -53,7 +52,8 @@ def load_or_download_logo(coin, url):
                 r, g, b = img.getpixel((x, y))
                 pixels.append(f"0x{rgb565(r,g,b):04X}")
         return ','.join(pixels)
-    except:
+    except Exception as e:
+        print(f"Logo processing error for {coin}: {e}")
         return "error"
 
 def fetch_data():
@@ -71,19 +71,19 @@ def fetch_data():
             cached_prices['pepe'] = f"{data['pepe']['usd']:.10f}"
             cached_prices['xrp'] = f"{data['ripple']['usd']:.4f}"
             cached_prices['ltc'] = f"{data['litecoin']['usd']:.4f}"
-        except:
-            pass
-
+        except Exception as e:
+            print(f"Price fetch error: {e}")
+        
         # Time
         try:
             r = requests.get('http://worldtimeapi.org/api/timezone/America/Chicago', timeout=10)
             r.raise_for_status()
             dt = r.json()['datetime']
             cached_time = dt[11:19]
-        except:
-            pass
-
-        # Logos - load from local or download once
+        except Exception as e:
+            print(f"Time fetch error: {e}")
+        
+        # Logos
         logo_urls = {
             'btc': 'https://cryptologos.cc/logos/bitcoin-btc-logo.png',
             'sol': 'https://cryptologos.cc/logos/solana-sol-logo.png',
@@ -93,12 +93,12 @@ def fetch_data():
             'ltc': 'https://cryptologos.cc/logos/litecoin-ltc-logo.png',
         }
         for coin, url in logo_urls.items():
-            cached_logos[coin] = load_or_download_logo(coin, url)
-
+            if coin not in cached_logos:
+                cached_logos[coin] = load_or_download_logo(coin, url)
+        
         with lock:
             last_fetch_time = time.time()
-
-        print(f"[{time.strftime('%H:%M:%S')}] Data + logos refreshed (using local where available)")
+        print(f"[{time.strftime('%H:%M:%S')}] Data refreshed")
         time.sleep(CACHE_SECONDS)
 
 @app.route('/<coin>')
@@ -119,7 +119,7 @@ def get_logo(coin):
         logo_data = cached_logos.get(coin, "error")
         if logo_data == "error":
             return "error", 404
-        return logo_data
+        return logo_data  # Plain text comma-separated
 
 @app.route('/')
 def index():
