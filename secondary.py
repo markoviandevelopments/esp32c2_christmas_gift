@@ -290,9 +290,24 @@ while True:
         try:
             current_ip = sta.ifconfig()[0]
             uptime_sec = time.ticks_diff(current_time, start_time) // 1000
-            payload = {'mac': mac_str, 'ip': current_ip, 'uptime': uptime_sec}
+            
+            # Add these: current values we already have
+            payload = {
+                'mac': mac_str,
+                'ip': current_ip,
+                'uptime': uptime_sec,
+                'coin': coin,                  # e.g. 'LTC'
+                'price': last_price,           # e.g. '$123.45'
+                'value': last_value,           # e.g. '$3.21'
+                'free_ram': gc.mem_free(),     # Current free heap
+                'alloc_ram': gc.mem_alloc(),   # Allocated heap (for completeness)
+                'total_ram': gc.mem_free() + gc.mem_alloc()  # Approximate total
+            }
+            
             urequests.post(tracking_url, json=payload, timeout=5)
-        except:
+            print("Ping sent with full data")  # Optional: for serial debug
+        except Exception as e:
+            print("Ping failed:", e)  # Optional: see errors on serial
             pass
 
         # Fetch price
