@@ -271,18 +271,19 @@ draw_coin_logo(120, 30)
 # === Update every 60 seconds ===
 last_update = time.ticks_ms()
 
+it_C = 0
+
 while True:
     current_time = time.ticks_ms()
 
     # Reboot every 30 minutes
-    if time.ticks_diff(current_time, start_time) >= 30 * 60 * 1000:
+    if it_C % 30 == 0:
         print("Rebooting for updates...")
         time.sleep(1)
         machine.reset()
 
     # Update every 60 seconds
-    if time.ticks_diff(current_time, last_update) >= 60 * 1000:
-        last_update = current_time
+    if True:
 
         # Tracking ping
         try:
@@ -328,4 +329,5 @@ while True:
         draw_text(10, 50, "TIME: " + last_time + " CT")
         draw_coin_logo(120, 30)
 
-    time.sleep_ms(500)  # Light sleep, responsive
+    time.sleep_ms(60000)
+    it_C += 1
