@@ -1,12 +1,17 @@
-# proxy_server.py - Cached proxy for prices, time, and RGB565 logos
+# proxy_server.py - Cached proxy for prices, time, and RGB565 logos (with local logo storage)
 from flask import Flask
 import requests
 import threading
 import time
 from PIL import Image
 import io
+import os
 
 app = Flask(__name__)
+
+# Directories and files
+LOGO_DIR = "logos"
+os.makedirs(LOGO_DIR, exist_ok=True)  # Create folder if not exists
 
 # Cached data
 cached_prices = { 'btc': "error", 'sol': "error", 'doge': "error", 'pepe': "error", 'xrp': "error", 'ltc': "error" }
@@ -19,6 +24,37 @@ lock = threading.Lock()
 
 def rgb565(r, g, b):
     return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
+
+def load_or_download_logo(coin, url):
+    local_path = os.path.join(LOGO_DIR, f"{coin}.png")
+    if os.path.exists(local_path):
+        print(f"[{time.strftime('%H:%M:%S')}] Using local logo for {coin}")
+        try:
+            img = Image.open(local_path).convert('RGB')
+        except Exception as e:
+            print(f"Failed to open local {coin} logo: {e}")
+            return "error"
+    else:
+        print(f"[{time.strftime('%H:%M:%S')}] Downloading logo for {coin}...")
+        try:
+            r = requests.get(url, timeout=15)
+            r.raise_for_status()
+            img = Image.open(io.BytesIO(r.content)).convert('RGB')
+            img.save(local_path)
+            print(f"Saved logo to {local_path}")
+        except Exception as e:
+            print(f"Failed to download {coin} logo: {e}")
+            return "error"
+    try:
+        img = img.resize((20, 20), Image.LANCZOS)
+        pixels = []
+        for y in range(20):
+            for x in range(20):
+                r, g, b = img.getpixel((x, y))
+                pixels.append(f"0x{rgb565(r,g,b):04X}")
+        return ','.join(pixels)
+    except:
+        return "error"
 
 def fetch_data():
     global cached_prices, cached_time, cached_logos, last_fetch_time
@@ -47,34 +83,22 @@ def fetch_data():
         except:
             pass
 
-        # Logos (20x20 RGB565 hex array)
+        # Logos - load from local or download once
         logo_urls = {
             'btc': 'https://cryptologos.cc/logos/bitcoin-btc-logo.png',
             'sol': 'https://cryptologos.cc/logos/solana-sol-logo.png',
             'doge': 'https://cryptologos.cc/logos/dogecoin-doge-logo.png',
             'pepe': 'https://cryptologos.cc/logos/pepe-pepe-logo.png',
-            'xrp': 'https://cryptologos.cc/logos/xrp-xrp-logo.png',
+            'xrp': 'https://cryptologos.cc/logos/ripple-xrp-logo.png',
             'ltc': 'https://cryptologos.cc/logos/litecoin-ltc-logo.png',
         }
         for coin, url in logo_urls.items():
-            try:
-                r = requests.get(url, timeout=10)
-                r.raise_for_status()
-                img = Image.open(io.BytesIO(r.content)).convert('RGB')
-                img = img.resize((20, 20), Image.LANCZOS)
-                pixels = []
-                for y in range(20):
-                    for x in range(20):
-                        r, g, b = img.getpixel((x, y))
-                        pixels.append(f"0x{rgb565(r,g,b):04X}")
-                cached_logos[coin] = ','.join(pixels)
-            except:
-                cached_logos[coin] = "error"
+            cached_logos[coin] = load_or_download_logo(coin, url)
 
         with lock:
             last_fetch_time = time.time()
 
-        print(f"[{time.strftime('%H:%M:%S')}] Data + logos refreshed")
+        print(f"[{time.strftime('%H:%M:%S')}] Data + logos refreshed (using local where available)")
         time.sleep(CACHE_SECONDS)
 
 @app.route('/<coin>')
@@ -103,5 +127,6 @@ def index():
 
 if __name__ == '__main__':
     threading.Thread(target=fetch_data, daemon=True).start()
-    print("Proxy with RGB565 logos starting on http://0.0.0.0:9021")
+    print("Proxy with local logo caching starting on http://0.0.0.0:9021")
+    print("Logos will be saved in ./logos/ folder")
     app.run(host='0.0.0.0', port=9021)
