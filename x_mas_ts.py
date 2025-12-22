@@ -18,13 +18,13 @@ def index():
     html += "</table>"
     return html
 
-@app.route('/ping', methods=['GET', 'POST'])
+@app.route('/ping')
 def ping():
     try:
-        data = request.args if request.method == 'GET' else request.get_json(force=True) or {}
+        data = request.args  # Handles GET query params directly
         mac = data.get('mac')
         if not mac:
-            return "No mac", 400
+            raise ValueError("Missing mac")
         devices[mac] = {
             'ip': data.get('ip', 'unknown'),
             'uptime': data.get('uptime', 0),
