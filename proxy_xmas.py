@@ -89,7 +89,7 @@ def fetch_data():
             'sol': 'https://cryptologos.cc/logos/solana-sol-logo.png',
             'doge': 'https://cryptologos.cc/logos/dogecoin-doge-logo.png',
             'pepe': 'https://cryptologos.cc/logos/pepe-pepe-logo.png',
-            'xrp': 'https://cryptologos.cc/logos/ripple-xrp-logo.png',
+            'xrp': 'https://cryptologos.cc/logos/xrp-xrp-logo.png',
             'ltc': 'https://cryptologos.cc/logos/litecoin-ltc-logo.png',
         }
         for coin, url in logo_urls.items():
