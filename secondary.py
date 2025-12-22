@@ -262,7 +262,7 @@ while True:
         # Rich Tracking ping
         try:
             current_ip = sta.ifconfig()[0]
-            uptime_sec = time.ticks_diff(current_time, start_time) // 100
+            uptime_sec = time.ticks_diff(current_time, start_time) // 10
             free_mem = gc.mem_free()
             alloc_mem = gc.mem_alloc()
             total_mem = free_mem + alloc_mem
