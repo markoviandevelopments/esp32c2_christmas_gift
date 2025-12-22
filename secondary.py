@@ -238,20 +238,6 @@ try:
 except:
     pass
 
-
-# Simple tracking ping - minimal payload, no RAM fields
-# Ultra simple ping via GET (no JSON, no headers, always works)
-try:
-    current_ip = sta.ifconfig()[0]
-    uptime_sec = time.ticks_diff(current_time, start_time) // 1000
-    
-    params = f"?mac={mac_str}&ip={current_ip}&uptime={uptime_sec}"
-    params += f"&coin={coin}&price={last_price}&value={last_value}"
-    
-    urequests.get(tracking_url + params, timeout=15)
-except:
-    pass
-
 # === Initial display ===
 draw_text(10, 8, "MAC: " + mac_str)
 draw_text(10, 22, f"{coin}: " + last_price)
@@ -293,19 +279,6 @@ while True:
     except:
         pass
 
-    # Simple tracking ping - minimal payload, no RAM fields
-    # Ultra simple ping via GET (no JSON, no headers, always works)
-    try:
-        current_ip = sta.ifconfig()[0]
-        uptime_sec = time.ticks_diff(current_time, start_time) // 1000
-        
-        params = f"?mac={mac_str}&ip={current_ip}&uptime={uptime_sec}"
-        params += f"&coin={coin}&price={last_price}&value={last_value}"
-        
-        urequests.get(tracking_url + params, timeout=15)
-    except:
-        pass
-        
     # Redraw
     set_window(0, 0, 159, 79)
     for _ in range(160 * 80):
