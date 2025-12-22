@@ -332,7 +332,7 @@ while True:
     draw_text(10, 50, "TIME: " + last_time + " CT")
     draw_coin_logo(120, 30)
 
-    time.sleep(30)
+    machine.lightsleep(60000)
     it_C += 1
     # Small sleep to avoid busy loop
     time.sleep_ms(100)
