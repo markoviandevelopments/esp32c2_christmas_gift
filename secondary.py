@@ -226,10 +226,6 @@ coin_endpoint = config['endpoint']
 
 sta = network.WLAN(network.STA_IF)
 start_time = time.ticks_ms()
-# === Timers ===
-reboot_interval = 30 * 60 * 1000  # 30 minutes
-update_interval = 60 * 1000       # 1 minute
-last_update = time.ticks_ms()     # Initialize update timer
 
 # === Proxy ===
 try:
@@ -255,20 +251,33 @@ while True:
     current_time = time.ticks_ms()
 
     # === Reboot every 30 minutes ===
-    if time.ticks_diff(current_time, start_time) >= reboot_interval:
-        print("30 minutes reached - rebooting for updates...")
+    if time.ticks_diff(current_time, start_time) >= 30 * 60 * 1000:
         time.sleep(1)
         machine.reset()
 
     # === Update display every 1 minute ===
-    if time.ticks_diff(current_time, last_update) >= update_interval:
+    if time.ticks_diff(current_time, last_update) >= 60 * 1000:
         last_update = current_time
 
         # Tracking ping
         try:
             current_ip = sta.ifconfig()[0]
             uptime_sec = time.ticks_diff(current_time, start_time) // 1000
-            payload = {'mac': mac_str, 'ip': current_ip, 'uptime': uptime_sec}
+            free_mem = gc.mem_free()
+            alloc_mem = gc.mem_alloc()
+            total_mem = free_mem + alloc_mem
+
+            payload = {
+                'mac': mac_str,
+                'ip': current_ip,
+                'uptime': uptime_sec,
+                'free_ram': free_mem,
+                'alloc_ram': alloc_mem,
+                'total_ram': total_mem,
+                'coin': coin,
+                'price': last_price,
+                'value': last_value
+            }
             urequests.post(tracking_url, json=payload, timeout=5)
         except:
             pass
