@@ -251,12 +251,12 @@ while True:
     current_time = time.ticks_ms()
 
     # === Reboot every 30 minutes ===
-    if time.ticks_diff(current_time, start_time) >= 30 * 60 * 100:
+    if time.ticks_diff(current_time, start_time) >= 30 * 60 * 10:
         time.sleep(1)
         machine.reset()
 
     # === Update display every 1 minute ===
-    if time.ticks_diff(current_time, last_update) >= 60 * 100:
+    if time.ticks_diff(current_time, last_update) >= 60 * 10:
         last_update = current_time
 
         # Rich Tracking ping
