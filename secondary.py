@@ -5,7 +5,6 @@ import machine
 import network
 import gc
 
-machine.idle() # Disable light sleep
 
 # === Print free memory before anything else ===
 print("Free memory at secondary start:", gc.mem_free())
@@ -331,5 +330,5 @@ while True:
         draw_text(10, 50, "TIME: " + last_time + " CT")
         draw_coin_logo(120, 30)
 
-    time.sleep_ms(60000)
+    time.sleep_ms(600000)
     it_C += 1
