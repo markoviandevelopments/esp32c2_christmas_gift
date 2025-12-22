@@ -1,11 +1,11 @@
-# tracking_server.py - Rich ESP32-C2 tracker with RAM, coin, price
+# tracking_server.py - Rich ESP32-C2 tracker with RAM, coin, price (more robust POST handling)
 from flask import Flask, jsonify, request, render_template_string
 from datetime import datetime
 import threading
 import time
+import json  # For manual JSON parsing fallback
 
 app = Flask(__name__)
-
 devices = {}
 lock = threading.Lock()
 
@@ -78,7 +78,22 @@ def index():
 @app.route('/ping', methods=['POST'])
 def ping():
     try:
-        data = request.json
+        # Primary: Try JSON (requires Content-Type: application/json)
+        data = request.get_json(silent=True)
+        
+        # Fallback: If no JSON, try raw data or form
+        if data is None:
+            if request.data:
+                try:
+                    data = json.loads(request.data)
+                except:
+                    pass
+            elif request.form:
+                data = request.form.to_dict()
+        
+        if not data or 'mac' not in data:
+            raise ValueError("Missing 'mac' or invalid payload")
+        
         mac = data['mac']
         with lock:
             devices[mac] = {
@@ -92,11 +107,11 @@ def ping():
                 'total_ram': data.get('total_ram', 0),
                 'last_seen': time.time()
             }
-        print(f"[{datetime.now()}] Rich ping from {mac}")
+        print(f"[{datetime.now()}] Rich ping from {mac} (IP: {data.get('ip')})")
         return jsonify({'status': 'ok'})
     except Exception as e:
-        print("Bad ping:", e)
-        return jsonify({'status': 'error'}), 400
+        print(f"Bad ping: {e} | Content-Type: {request.headers.get('Content-Type')} | Raw data: {request.data}")
+        return jsonify({'status': 'error', 'reason': str(e)}), 400
 
 if __name__ == '__main__':
     print("Rich tracking server starting on http://0.0.0.0:9020")
