@@ -350,3 +350,5 @@ while True:
     for i in range(3000000):
         j+ = 1
     it_C += 1
+    # Small sleep to avoid busy loop
+    time.sleep_ms(100)
