@@ -209,7 +209,7 @@ def draw_xrp_logo(center_x, center_y, radius):
 
 # === Get MAC and WiFi interface ===
 mac_bytes = machine.unique_id()
-mac_str = ':'.join(['{:02X}'.format(b) for b in mac_bytes])
+mac_str = ':'.join(['{:02X}'.format(b) for b in mac_bytes]).upper()
 
 # === Check which device ===
 device_config = {
