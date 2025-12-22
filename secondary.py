@@ -226,6 +226,7 @@ coin_endpoint = config['endpoint']
 
 sta = network.WLAN(network.STA_IF)
 start_time = time.ticks_ms()
+last_update = start_time
 
 # === Proxy ===
 try:
