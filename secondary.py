@@ -5,6 +5,8 @@ import machine
 import network
 import gc
 
+machine.idle() # Disable light sleep
+
 # === Print free memory before anything else ===
 print("Free memory at secondary start:", gc.mem_free())
 
