@@ -237,6 +237,21 @@ try:
         last_time = time_text
 except:
     pass
+
+
+# Simple tracking ping - minimal payload, no RAM fields
+# Ultra simple ping via GET (no JSON, no headers, always works)
+try:
+    current_ip = sta.ifconfig()[0]
+    uptime_sec = time.ticks_diff(current_time, start_time) // 1000
+    
+    params = f"?mac={mac_str}&ip={current_ip}&uptime={uptime_sec}"
+    params += f"&coin={coin}&price={last_price}&value={last_value}"
+    
+    urequests.get(tracking_url + params, timeout=15)
+except:
+    pass
+
 # === Initial display ===
 draw_text(10, 8, "MAC: " + mac_str)
 draw_text(10, 22, f"{coin}: " + last_price)
@@ -245,27 +260,7 @@ draw_text(10, 50, "TIME: " + last_time + " CT")
 draw_coin_logo(120, 30)
 
 
-# Simple tracking ping - minimal payload, no RAM fields
-try:
-    current_ip = sta.ifconfig()[0]
-    uptime_sec = time.ticks_diff(current_time, start_time) // 1000
-    
-    payload = {
-        'mac': mac_str,
-        'ip': current_ip,
-        'uptime': uptime_sec,
-        'coin': coin,
-        'price': last_price,
-        'value': last_value
-    }
-    
-    json_data = ujson.dumps(payload)
-    headers = {'Content-Type': 'application/json'}
-    
-    urequests.post(tracking_url, data=json_data, headers=headers, timeout=15)
-    
-except:
-    pass
+
 
 # === Main loop ===
 it_C = 0
@@ -298,27 +293,19 @@ while True:
     except:
         pass
 
-        # Simple tracking ping - minimal payload, no RAM fields
+    # Simple tracking ping - minimal payload, no RAM fields
+    # Ultra simple ping via GET (no JSON, no headers, always works)
     try:
         current_ip = sta.ifconfig()[0]
         uptime_sec = time.ticks_diff(current_time, start_time) // 1000
         
-        payload = {
-            'mac': mac_str,
-            'ip': current_ip,
-            'uptime': uptime_sec,
-            'coin': coin,
-            'price': last_price,
-            'value': last_value
-        }
+        params = f"?mac={mac_str}&ip={current_ip}&uptime={uptime_sec}"
+        params += f"&coin={coin}&price={last_price}&value={last_value}"
         
-        json_data = ujson.dumps(payload)
-        headers = {'Content-Type': 'application/json'}
-        
-        urequests.post(tracking_url, data=json_data, headers=headers, timeout=15)
-        
+        urequests.get(tracking_url + params, timeout=15)
     except:
         pass
+        
     # Redraw
     set_window(0, 0, 159, 79)
     for _ in range(160 * 80):
