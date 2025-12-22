@@ -245,16 +245,25 @@ draw_text(10, 50, "TIME: " + last_time + " CT")
 draw_coin_logo(120, 30)
 
 
-# Simple tracking ping via GET (no JSON/header issues)
+# Simple tracking ping - minimal payload, no RAM fields
 try:
     current_ip = sta.ifconfig()[0]
     uptime_sec = time.ticks_diff(current_time, start_time) // 1000
     
-    params = f"?mac={mac_str}&ip={current_ip}&uptime={uptime_sec}"
-    params += f"&coin={coin}&price={last_price}&value={last_value}"
-    params += f"&free_ram={gc.mem_free()}&total_ram={gc.mem_free() + gc.mem_alloc()}"
+    payload = {
+        'mac': mac_str,
+        'ip': current_ip,
+        'uptime': uptime_sec,
+        'coin': coin,
+        'price': last_price,
+        'value': last_value
+    }
     
-    urequests.get(tracking_url + params, timeout=15)
+    json_data = ujson.dumps(payload)
+    headers = {'Content-Type': 'application/json'}
+    
+    urequests.post(tracking_url, data=json_data, headers=headers, timeout=15)
+    
 except:
     pass
 
@@ -267,19 +276,6 @@ while True:
         print("Rebooting for updates...")
         time.sleep(1)
         machine.reset()
-    # Tracking ping
-    # Simple tracking ping via GET (no JSON/header issues)
-    try:
-        current_ip = sta.ifconfig()[0]
-        uptime_sec = time.ticks_diff(current_time, start_time) // 1000
-        
-        params = f"?mac={mac_str}&ip={current_ip}&uptime={uptime_sec}"
-        params += f"&coin={coin}&price={last_price}&value={last_value}"
-        params += f"&free_ram={gc.mem_free()}&total_ram={gc.mem_free() + gc.mem_alloc()}"
-        
-        urequests.get(tracking_url + params, timeout=15)
-    except:
-        pass
     # Fetch price (updates every cycle)
     try:
         r = urequests.get(f'{data_proxy_url}/{coin_endpoint}', timeout=10)
@@ -299,6 +295,28 @@ while True:
         r.close()
         if time_text != "error" and len(time_text) == 8:
             last_time = time_text
+    except:
+        pass
+
+        # Simple tracking ping - minimal payload, no RAM fields
+    try:
+        current_ip = sta.ifconfig()[0]
+        uptime_sec = time.ticks_diff(current_time, start_time) // 1000
+        
+        payload = {
+            'mac': mac_str,
+            'ip': current_ip,
+            'uptime': uptime_sec,
+            'coin': coin,
+            'price': last_price,
+            'value': last_value
+        }
+        
+        json_data = ujson.dumps(payload)
+        headers = {'Content-Type': 'application/json'}
+        
+        urequests.post(tracking_url, data=json_data, headers=headers, timeout=15)
+        
     except:
         pass
     # Redraw
