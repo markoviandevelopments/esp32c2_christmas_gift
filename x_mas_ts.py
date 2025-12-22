@@ -17,11 +17,10 @@ def index():
         html += f"<tr><td>{mac}</td><td>{info['ip']}</td><td>{info['uptime']}</td><td>{info['coin']}</td><td>{info['price']}</td><td>{info['value']}</td><td>{datetime.fromtimestamp(info['last_seen']).strftime('%H:%M:%S')}</td></tr>"
     html += "</table>"
     return html
-
 @app.route('/ping')
 def ping():
     try:
-        data = request.args  # Handles GET query params directly
+        data = request.args  # This handles query params from GET requests
         mac = data.get('mac')
         if not mac:
             raise ValueError("Missing mac")
