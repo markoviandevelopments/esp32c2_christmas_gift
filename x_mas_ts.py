@@ -1,4 +1,4 @@
-# simple_tracking_server.py - Minimal tracker, no RAM fields
+# ultra_simple_tracker.py
 from flask import Flask, request
 from datetime import datetime
 import time
@@ -7,56 +7,24 @@ app = Flask(__name__)
 
 devices = {}
 
-HTML_PAGE = """
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Crypto Gifts Tracker</title>
-    <meta http-equiv="refresh" content="10">
-    <style>
-        body { font-family: sans-serif; background: #111; color: #eee; margin: 20px; }
-        h1 { color: #0f0; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { padding: 8px; border: 1px solid #444; text-align: left; }
-        th { background: #222; }
-    </style>
-</head>
-<body>
-    <h1>Crypto Gifts - Live</h1>
-    <p>Last refresh: <span id="time"></span></p>
-    <script>document.getElementById('time').innerText = new Date().toLocaleString();</script>
-    {%DEVICES%}
-    {% if not devices %}
-    <p>No devices online yet.</p>
-    {% endif %}
-</body>
-</html>
-"""
-
-def generate_table():
-    if not devices:
-        return ""
-    sorted_devices = sorted(devices.items(), key=lambda x: x[1]['last_seen'], reverse=True)
-    rows = ""
-    for mac, info in sorted_devices:
-        rows += f"<tr><td>{mac}</td><td>{info.get('ip', 'unknown')}</td><td>{info.get('uptime', 0)}s</td>"
-        rows += f"<td>{info.get('coin', 'unknown')}</td><td>{info.get('price', '---')}</td><td>{info.get('value', '---')}</td>"
-        rows += f"<td>{datetime.fromtimestamp(info['last_seen']).strftime('%H:%M:%S')}</td></tr>"
-    return "<table><tr><th>MAC</th><th>IP</th><th>Uptime</th><th>Coin</th><th>Price</th><th>Value</th><th>Last Seen</th></tr>" + rows + "</table>"
-
 @app.route('/')
 def index():
-    table = generate_table()
-    page = HTML_PAGE.replace("{%DEVICES%}", table)
-    return page
+    if not devices:
+        return "<h1>No devices online yet</h1>"
+    sorted_dev = sorted(devices.items(), key=lambda x: x[1]['last_seen'], reverse=True)
+    html = "<h1>Crypto Gifts Live</h1><table border='1'><tr><th>MAC</th><th>IP</th><th>Uptime (s)</th><th>Coin</th><th>Price</th><th>Value</th><th>Last Seen</th></tr>"
+    for mac, info in sorted_dev:
+        html += f"<tr><td>{mac}</td><td>{info['ip']}</td><td>{info['uptime']}</td><td>{info['coin']}</td><td>{info['price']}</td><td>{info['value']}</td><td>{datetime.fromtimestamp(info['last_seen']).strftime('%H:%M:%S')}</td></tr>"
+    html += "</table>"
+    return html
 
-@app.route('/ping', methods=['POST'])
+@app.route('/ping', methods=['GET', 'POST'])
 def ping():
     try:
-        data = request.get_json(force=True)  # Accept JSON even if header missing
-        if not data or 'mac' not in data:
-            raise ValueError("Missing mac")
-        mac = data['mac']
+        data = request.args if request.method == 'GET' else request.get_json(force=True) or {}
+        mac = data.get('mac')
+        if not mac:
+            return "No mac", 400
         devices[mac] = {
             'ip': data.get('ip', 'unknown'),
             'uptime': data.get('uptime', 0),
@@ -65,12 +33,12 @@ def ping():
             'value': data.get('value', '---'),
             'last_seen': time.time()
         }
-        print(f"[{datetime.now()}] Ping from {mac}")
+        print(f"[{datetime.now()}] PING RECEIVED from {mac}")
         return "OK", 200
     except Exception as e:
-        print(f"Bad ping: {e}")
+        print(f"BAD PING: {e}")
         return "ERROR", 400
 
 if __name__ == '__main__':
-    print("Minimal tracking server running on http://0.0.0.0:9020")
+    print("Ultra simple tracker on http://0.0.0.0:9020")
     app.run(host='0.0.0.0', port=9020)
