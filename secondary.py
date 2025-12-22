@@ -345,9 +345,9 @@ while True:
         draw_coin_logo(120, 30)
 
     # Busy loop to get ~30-60 seconds (sigh...)
-    j = 0
-    for i in range(3000000):
-        j+ = 1
-    it_C += 1
+    # j = 0
+    # for i in range(3000000):
+    #     j+ = 1
+    # it_C += 1
     # Small sleep to avoid busy loop
     time.sleep_ms(100)
