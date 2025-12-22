@@ -251,18 +251,18 @@ while True:
     current_time = time.ticks_ms()
 
     # === Reboot every 30 minutes ===
-    if time.ticks_diff(current_time, start_time) >= 30 * 60 * 1000:
+    if time.ticks_diff(current_time, start_time) >= 30 * 60 * 100:
         time.sleep(1)
         machine.reset()
 
     # === Update display every 1 minute ===
-    if time.ticks_diff(current_time, last_update) >= 60 * 1000:
+    if time.ticks_diff(current_time, last_update) >= 60 * 100:
         last_update = current_time
 
         # Rich Tracking ping
         try:
             current_ip = sta.ifconfig()[0]
-            uptime_sec = time.ticks_diff(current_time, start_time) // 1000
+            uptime_sec = time.ticks_diff(current_time, start_time) // 100
             free_mem = gc.mem_free()
             alloc_mem = gc.mem_alloc()
             total_mem = free_mem + alloc_mem
