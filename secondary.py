@@ -4,6 +4,7 @@ import urequests
 import machine
 import network
 import gc
+import ujson
 
 
 # === Print free memory before anything else ===
@@ -286,7 +287,6 @@ while True:
     # Update every 60 seconds
     # Tracking ping
     try:
-        gc.collect()  # Optional: free some RAM before network op
         current_ip = sta.ifconfig()[0]
         uptime_sec = time.ticks_diff(current_time, start_time) // 1000
         
@@ -301,23 +301,13 @@ while True:
             'alloc_ram': gc.mem_alloc(),
             'total_ram': gc.mem_free() + gc.mem_alloc()
         }
-        # Key change: use data=payload (urequests auto-sets JSON header)
-        urequests.post(tracking_url, json=payload, timeout=10)
+        
+        json_data = ujson.dumps(payload)
+        headers = {'Content-Type': 'application/json'}
+        
+        urequests.post(tracking_url, data=json_data, headers=headers, timeout=15)
         
     except Exception as e:
-        pass
-
-    # Fetch price
-    try:
-        r = urequests.get(f'{data_proxy_url}/{coin_endpoint}', timeout=10)
-        price_text = r.text.strip()
-        r.close()
-        if price_text != "error":
-            price = float(price_text)
-            last_price = f"${price}"
-            value = price * amount
-            last_value = f"${value:.8f}" if coin == 'BTC' else f"${value:.2f}" if coin in ['SOL', 'LTC'] else f"${value:.6f}" if coin == 'DOGE' else f"${value}"
-    except:
         pass
 
     # Fetch time
