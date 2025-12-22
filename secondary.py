@@ -332,10 +332,7 @@ while True:
     draw_text(10, 50, "TIME: " + last_time + " CT")
     draw_coin_logo(120, 30)
 
-    # Busy loop to get ~30-60 seconds
-    # j = 0
-    # for i in range(3000000):
-    #     j+ = 1
+    time.sleep(30)
     it_C += 1
     # Small sleep to avoid busy loop
     time.sleep_ms(100)
