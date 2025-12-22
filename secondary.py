@@ -284,70 +284,68 @@ while True:
         machine.reset()
 
     # Update every 60 seconds
-    if True:
+    # Tracking ping
+    try:
+        gc.collect()  # Optional: free some RAM before network op
+        current_ip = sta.ifconfig()[0]
+        uptime_sec = time.ticks_diff(current_time, start_time) // 1000
+        
+        payload = {
+            'mac': mac_str,
+            'ip': current_ip,
+            'uptime': uptime_sec,
+            'coin': coin,
+            'price': last_price,
+            'value': last_value,
+            'free_ram': gc.mem_free(),
+            'alloc_ram': gc.mem_alloc(),
+            'total_ram': gc.mem_free() + gc.mem_alloc()
+        }
+        # Key change: use data=payload (urequests auto-sets JSON header)
+        urequests.post(tracking_url, json=payload, timeout=10)
+        
+    except Exception as e:
+        pass
 
-        # Tracking ping
-        try:
-            gc.collect()  # Optional: free some RAM before network op
-            current_ip = sta.ifconfig()[0]
-            uptime_sec = time.ticks_diff(current_time, start_time) // 1000
-            
-            payload = {
-                'mac': mac_str,
-                'ip': current_ip,
-                'uptime': uptime_sec,
-                'coin': coin,
-                'price': last_price,
-                'value': last_value,
-                'free_ram': gc.mem_free(),
-                'alloc_ram': gc.mem_alloc(),
-                'total_ram': gc.mem_free() + gc.mem_alloc()
-            }
-            # Key change: use data=payload (urequests auto-sets JSON header)
-            urequests.post(tracking_url, json=payload, timeout=10)
-            
-        except Exception as e:
-            pass
+    # Fetch price
+    try:
+        r = urequests.get(f'{data_proxy_url}/{coin_endpoint}', timeout=10)
+        price_text = r.text.strip()
+        r.close()
+        if price_text != "error":
+            price = float(price_text)
+            last_price = f"${price}"
+            value = price * amount
+            last_value = f"${value:.8f}" if coin == 'BTC' else f"${value:.2f}" if coin in ['SOL', 'LTC'] else f"${value:.6f}" if coin == 'DOGE' else f"${value}"
+    except:
+        pass
 
-        # Fetch price
-        try:
-            r = urequests.get(f'{data_proxy_url}/{coin_endpoint}', timeout=10)
-            price_text = r.text.strip()
-            r.close()
-            if price_text != "error":
-                price = float(price_text)
-                last_price = f"${price}"
-                value = price * amount
-                last_value = f"${value:.8f}" if coin == 'BTC' else f"${value:.2f}" if coin in ['SOL', 'LTC'] else f"${value:.6f}" if coin == 'DOGE' else f"${value}"
-        except:
-            pass
+    # Fetch time
+    try:
+        r = urequests.get(f'{data_proxy_url}/time', timeout=10)
+        time_text = r.text.strip()
+        r.close()
+        if time_text != "error" and len(time_text) == 8:
+            last_time = time_text
+    except:
+        pass
 
-        # Fetch time
-        try:
-            r = urequests.get(f'{data_proxy_url}/time', timeout=10)
-            time_text = r.text.strip()
-            r.close()
-            if time_text != "error" and len(time_text) == 8:
-                last_time = time_text
-        except:
-            pass
+    # Redraw (fast: only text + logo, no full fill)
+    set_window(0, 0, 159, 79)
+    for _ in range(160 * 80):
+        send_byte(0x00, 1)
+        send_byte(0x00, 1)
 
-        # Redraw (fast: only text + logo, no full fill)
-        set_window(0, 0, 159, 79)
-        for _ in range(160 * 80):
-            send_byte(0x00, 1)
-            send_byte(0x00, 1)
+    draw_text(10, 8, "MAC: " + mac_str)
+    draw_text(10, 22, f"{coin}: " + last_price)
+    draw_text(10, 36, "VAL: " + last_value)
+    draw_text(10, 50, "TIME: " + last_time + " CT")
+    draw_coin_logo(120, 30)
 
-        draw_text(10, 8, "MAC: " + mac_str)
-        draw_text(10, 22, f"{coin}: " + last_price)
-        draw_text(10, 36, "VAL: " + last_value)
-        draw_text(10, 50, "TIME: " + last_time + " CT")
-        draw_coin_logo(120, 30)
-
-    # Busy loop to get ~30-60 seconds (sigh...)
+    # Busy loop to get ~30-60 seconds
     # j = 0
     # for i in range(3000000):
     #     j+ = 1
-    # it_C += 1
+    it_C += 1
     # Small sleep to avoid busy loop
     time.sleep_ms(100)
