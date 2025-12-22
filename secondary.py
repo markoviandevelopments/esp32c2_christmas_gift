@@ -226,7 +226,6 @@ coin_endpoint = config['endpoint']
 
 sta = network.WLAN(network.STA_IF)
 start_time = time.ticks_ms()
-last_update = start_time
 
 # === Proxy ===
 try:
@@ -236,59 +235,70 @@ except OSError:
 data_proxy_url = f'http://{server_ip}:9021'
 tracking_url = f'http://{server_ip}:9020/ping'
 
-# === Initial display ===
-draw_text(10, 8, "MAC: " + mac_str)
-draw_text(10, 22, f"{coin}: ---")
-draw_text(10, 36, "VAL: ---")
-draw_text(10, 50, "TIME: --:--:-- CT")
-draw_coin_logo(120, 30)
-
 # === Update loop ===
 last_price = "---"
 last_value = "---"
 last_time = "--:--:--"
 
+try:
+    r = urequests.get(f'{data_proxy_url}/{coin_endpoint}', timeout=10)
+    price_text = r.text.strip()
+    r.close()
+    if price_text != "error":
+        price = float(price_text)
+        last_price = f"${price}"
+        value = price * amount
+        last_value = f"${value:.8f}" if coin == 'BTC' else f"${value:.2f}" if coin in ['SOL', 'LTC'] else f"${value:.6f}" if coin == 'DOGE' else f"${value}"
+except:
+    pass
+
+try:
+    r = urequests.get(f'{data_proxy_url}/time', timeout=10)
+    time_text = r.text.strip()
+    r.close()
+    if time_text != "error" and len(time_text) == 8:
+        last_time = time_text
+except:
+    pass
+
+# === Initial display with fetched data ===
+draw_text(10, 8, "MAC: " + mac_str)
+draw_text(10, 22, f"{coin}: " + last_price)
+draw_text(10, 36, "VAL: " + last_value)
+draw_text(10, 50, "TIME: " + last_time + " CT")
+draw_coin_logo(120, 30)
+
+# === Update every 60 seconds ===
+last_update = time.ticks_ms()
+
 while True:
     current_time = time.ticks_ms()
 
-    # === Reboot every 30 minutes ===
+    # Reboot every 30 minutes
     if time.ticks_diff(current_time, start_time) >= 30 * 60 * 1000:
+        print("Rebooting for updates...")
         time.sleep(1)
         machine.reset()
 
-    # === Update display every 1 minute ===
+    # Update every 60 seconds
     if time.ticks_diff(current_time, last_update) >= 60 * 1000:
         last_update = current_time
 
-        # Rich Tracking ping
+        # Tracking ping
         try:
             current_ip = sta.ifconfig()[0]
-            uptime_sec = time.ticks_diff(current_time, start_time)
-            free_mem = gc.mem_free()
-            alloc_mem = gc.mem_alloc()
-            total_mem = free_mem + alloc_mem
-
-            payload = {
-                'mac': mac_str,
-                'ip': current_ip,
-                'uptime': uptime_sec,
-                'free_ram': free_mem,
-                'alloc_ram': alloc_mem,
-                'total_ram': total_mem,
-                'coin': coin,
-                'price': last_price,
-                'value': last_value
-            }
+            uptime_sec = time.ticks_diff(current_time, start_time) // 1000
+            payload = {'mac': mac_str, 'ip': current_ip, 'uptime': uptime_sec}
             urequests.post(tracking_url, json=payload, timeout=5)
         except:
             pass
 
         # Fetch price
         try:
-            r = urequests.get(f'{data_proxy_url}/{coin_endpoint}')
+            r = urequests.get(f'{data_proxy_url}/{coin_endpoint}', timeout=10)
             price_text = r.text.strip()
             r.close()
-            if price_text != "error" and price_text != "":
+            if price_text != "error":
                 price = float(price_text)
                 last_price = f"${price}"
                 value = price * amount
@@ -298,7 +308,7 @@ while True:
 
         # Fetch time
         try:
-            r = urequests.get(f'{data_proxy_url}/time')
+            r = urequests.get(f'{data_proxy_url}/time', timeout=10)
             time_text = r.text.strip()
             r.close()
             if time_text != "error" and len(time_text) == 8:
@@ -306,7 +316,7 @@ while True:
         except:
             pass
 
-        # Redraw
+        # Redraw (fast: only text + logo, no full fill)
         set_window(0, 0, 159, 79)
         for _ in range(160 * 80):
             send_byte(0x00, 1)
@@ -318,5 +328,4 @@ while True:
         draw_text(10, 50, "TIME: " + last_time + " CT")
         draw_coin_logo(120, 30)
 
-    # Small sleep to avoid busy loop
-    time.sleep_ms(100)
+    time.sleep_ms(500)  # Light sleep, responsive
