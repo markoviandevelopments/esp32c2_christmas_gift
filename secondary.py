@@ -218,25 +218,30 @@ tracking_url = f'http://{server_ip}:9020/ping'
 last_price = "---"
 last_value = "---"
 last_time = "--:--:--"
-try:
-    r = urequests.get(f'{data_proxy_url}/{coin_endpoint}', timeout=10)
-    price_text = r.text.strip()
-    r.close()
-    if price_text != "error":
-        price = float(price_text)
-        last_price = f"${price}"
-        value = price * amount
-        last_value = f"${value:.8f}" if coin == 'BTC' else f"${value:.2f}" if coin in ['SOL', 'LTC'] else f"${value:.6f}" if coin == 'DOGE' else f"${value}"
-except:
-    pass
-try:
-    r = urequests.get(f'{data_proxy_url}/time', timeout=10)
-    time_text = r.text.strip()
-    r.close()
-    if time_text != "error" and len(time_text) == 8:
-        last_time = time_text
-except:
-    pass
+
+
+def fetch_info():
+    try:
+        r = urequests.get(f'{data_proxy_url}/{coin_endpoint}', timeout=10)
+        price_text = r.text.strip()
+        r.close()
+        if price_text != "error":
+            price = float(price_text)
+            last_price = f"${price}"
+            value = price * amount
+            last_value = f"${value:.8f}" if coin == 'BTC' else f"${value:.2f}" if coin in ['SOL', 'LTC'] else f"${value:.6f}" if coin == 'DOGE' else f"${value}"
+    except:
+        pass
+    try:
+        r = urequests.get(f'{data_proxy_url}/time', timeout=10)
+        time_text = r.text.strip()
+        r.close()
+        if time_text != "error" and len(time_text) == 8:
+            last_time = time_text
+    except:
+        pass
+
+fetch_info()
 
 # === Initial display ===
 draw_text(10, 8, "MAC: " + mac_str)
@@ -257,27 +262,9 @@ while True:
         print("Rebooting for updates...")
         time.sleep(1)
         machine.reset()
-    # Fetch price (updates every cycle)
-    try:
-        r = urequests.get(f'{data_proxy_url}/{coin_endpoint}', timeout=10)
-        price_text = r.text.strip()
-        r.close()
-        if price_text != "error":
-            price = float(price_text)
-            last_price = f"${price}"
-            value = price * amount
-            last_value = f"${value:.8f}" if coin == 'BTC' else f"${value:.2f}" if coin in ['SOL', 'LTC'] else f"${value:.6f}" if coin == 'DOGE' else f"${value}"
-    except:
-        pass
-    # Fetch time
-    try:
-        r = urequests.get(f'{data_proxy_url}/time', timeout=10)
-        time_text = r.text.strip()
-        r.close()
-        if time_text != "error" and len(time_text) == 8:
-            last_time = time_text
-    except:
-        pass
+        it_c = 0
+    
+    fetch_info()
 
     # Redraw
     set_window(0, 0, 159, 79)
