@@ -221,6 +221,7 @@ last_time = "--:--:--"
 
 
 def fetch_info():
+    global last_price, last_value, last_time
     try:
         r = urequests.get(f'{data_proxy_url}/{coin_endpoint}', timeout=10)
         price_text = r.text.strip()
@@ -262,7 +263,7 @@ while True:
         print("Rebooting for updates...")
         time.sleep(1)
         machine.reset()
-        it_c = 0
+        it_C = 0
     
     fetch_info()
 
