@@ -20,7 +20,7 @@ cached_prices = { 'btc': "error", 'sol': "error", 'doge': "error", 'pepe': "erro
 cached_time = "error"
 cached_logos = {}  # coin -> "0xFFFF,0x0000,..." string
 last_fetch_time = 0
-CACHE_SECONDS = 300
+CACHE_SECONDS = 180
 lock = threading.Lock()
 
 def rgb565(r, g, b):
