@@ -6,6 +6,8 @@ import time
 from PIL import Image
 import io
 import os
+from zoneinfo import ZoneInfo  # Available in Python 3.9+, standard on modern Ubuntu
+import datetime
 
 app = Flask(__name__)
 
@@ -74,14 +76,14 @@ def fetch_data():
         except Exception as e:
             print(f"Price fetch error: {e}")
         
-        # Time
+        # Time - Current time in Central Time (America/Chicago), handles DST automatically
         try:
-            r = requests.get('http://worldtimeapi.org/api/timezone/America/Chicago', timeout=10)
-            r.raise_for_status()
-            dt = r.json()['datetime']
-            cached_time = dt[11:19]
+            chicago_tz = ZoneInfo("America/Chicago")
+            now_central = datetime.datetime.now(chicago_tz)
+            cached_time = now_central.strftime('%H:%M:%S')
         except Exception as e:
-            print(f"Time fetch error: {e}")
+            print(f"Time error: {e}")
+            cached_time = "error"
         
         # Logos
         logo_urls = {
