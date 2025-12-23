@@ -222,25 +222,44 @@ last_time = "--:--:--"
 
 def fetch_info():
     global last_price, last_value, last_time
+    price_updated = False
+    time_updated = False
+    
+    # Fetch price
     try:
-        r = urequests.get(f'{data_proxy_url}/{coin_endpoint}', timeout=10)
+        r = urequests.get(f'{data_proxy_url}/{coin_endpoint}', timeout=15)
         price_text = r.text.strip()
         r.close()
-        if price_text != "error":
+        if price_text != "error" and price_text.replace('.', '', 1).isdigit():
             price = float(price_text)
             last_price = f"${price}"
             value = price * amount
-            last_value = f"${value:.8f}" if coin == 'BTC' else f"${value:.2f}" if coin in ['SOL', 'LTC'] else f"${value:.6f}" if coin == 'DOGE' else f"${value}"
+            if coin == 'BTC':
+                last_value = f"${value:.8f}"
+            elif coin in ['SOL', 'LTC']:
+                last_value = f"${value:.2f}"
+            elif coin == 'DOGE':
+                last_value = f"${value:.6f}"
+            else:
+                last_value = f"${value}"
+            price_updated = True
     except:
-        pass
+        pass  # Keep old price if failed
+    
+    # Fetch time
     try:
-        r = urequests.get(f'{data_proxy_url}/time', timeout=10)
+        r = urequests.get(f'{data_proxy_url}/time', timeout=15)
         time_text = r.text.strip()
         r.close()
-        if time_text != "error" and len(time_text) == 8:
+        if time_text != "error" and len(time_text) == 8 and ':' in time_text:
             last_time = time_text
+            time_updated = True
     except:
-        pass
+        pass  # Keep old time if failed
+    
+    # Optional: print for debugging (visible in serial console)
+    if price_updated or time_updated:
+
 
 fetch_info()
 
