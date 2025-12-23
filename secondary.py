@@ -280,5 +280,5 @@ while True:
     # Accurate 60-second delay with idle (WiFi-friendly)
     current_time = time.ticks_ms()
     it_C += 1
-    while time.ticks_diff(time.ticks_ms(), current_time) < 600:
+    while time.ticks_diff(time.ticks_ms(), current_time) < 6000:
         machine.idle()  # Yields to WiFi/tasks - prevents network blockage
