@@ -59,9 +59,9 @@ def load_or_download_logo(coin, url):
         return "error"
 
 def fetch_data():
-    global cached_prices, cached_time, cached_logos, last_fetch_time
+    global cached_prices, cached_logos, last_fetch_time
     while True:
-        # Prices
+        # Prices only
         ids = "bitcoin,solana,dogecoin,pepe,ripple,litecoin"
         try:
             r = requests.get(f'https://api.coingecko.com/api/v3/simple/price?ids={ids}&vs_currencies=usd', timeout=10)
@@ -75,17 +75,8 @@ def fetch_data():
             cached_prices['ltc'] = f"{data['litecoin']['usd']:.4f}"
         except Exception as e:
             print(f"Price fetch error: {e}")
-        
-        # Time - Current time in Central Time (America/Chicago), handles DST automatically
-        try:
-            chicago_tz = ZoneInfo("America/Chicago")
-            now_central = datetime.datetime.now(chicago_tz)
-            cached_time = now_central.strftime('%H:%M:%S')
-        except Exception as e:
-            print(f"Time error: {e}")
-            cached_time = "error"
-        
-        # Logos
+       
+        # Logos (only on first run)
         logo_urls = {
             'btc': 'https://cryptologos.cc/logos/bitcoin-btc-logo.png',
             'sol': 'https://cryptologos.cc/logos/solana-sol-logo.png',
@@ -97,10 +88,10 @@ def fetch_data():
         for coin, url in logo_urls.items():
             if coin not in cached_logos:
                 cached_logos[coin] = load_or_download_logo(coin, url)
-        
+       
         with lock:
             last_fetch_time = time.time()
-        print(f"[{time.strftime('%H:%M:%S')}] Data refreshed")
+        print(f"[{time.strftime('%H:%M:%S')}] Prices and logos refreshed")
         time.sleep(CACHE_SECONDS)
 
 @app.route('/<coin>')
@@ -111,8 +102,14 @@ def get_price(coin):
 
 @app.route('/time')
 def get_central_time():
-    with lock:
-        return cached_time
+    try:
+        chicago_tz = ZoneInfo("America/Chicago")
+        now_central = datetime.datetime.now(chicago_tz)
+        current_time = now_central.strftime('%H:%M:%S')
+        return current_time
+    except Exception as e:
+        print(f"Time generation error: {e}")
+        return "error"
 
 @app.route('/logo/<coin>')
 def get_logo(coin):
