@@ -242,17 +242,6 @@ def fetch_info():
     except:
         pass
 
-fetch_info()
-
-# === Initial display ===
-draw_text(10, 8, "MAC: " + mac_str)
-draw_text(10, 22, f"{coin}: " + last_price)
-draw_text(10, 36, "VAL: " + last_value)
-draw_text(10, 50, "TIME: " + last_time + " CT")
-draw_coin_logo(120, 30)
-
-
-
 
 # === Main loop ===
 it_C = 0
