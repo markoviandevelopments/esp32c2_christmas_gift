@@ -1,182 +1,207 @@
-import time
+# boot.py - Pure BLE provisioning + immediate WiFi connect after provisioning (no restart needed)
+import asyncio
+import bluetooth
+import gc
 import machine
+import network
+import os
+import time
+import urequests
+import binascii
 
-# === Pins (same as your working code) ===
-sck = machine.Pin(8, machine.Pin.OUT)
-mosi = machine.Pin(20, machine.Pin.OUT)
-dc = machine.Pin(9, machine.Pin.OUT)
-rst = machine.Pin(19, machine.Pin.OUT)
+gc.collect()
 
-# === Bit-bang functions (identical to your working code) ===
-def send_byte(byte, is_data):
-    dc.value(is_data)
-    for _ in range(8):
-        sck.value(0)
-        mosi.value(byte & 0x80)
-        byte <<= 1
-        sck.value(1)
-    sck.value(0)
+# Print MAC early
+mac_bytes = machine.unique_id()
+mac_str = ':'.join(['{:02X}'.format(b) for b in mac_bytes])
+print("=== XH-C2X MAC ===")
+print(mac_str)
+print("=================================")
 
-def send_command(cmd, data=b''):
-    send_byte(cmd, 0)
-    for b in data:
-        send_byte(b, 1)
+# BLE UUIDs
+_SERVICE_UUID = bluetooth.UUID('12345678-1234-1234-1234-123456789abc')
+_SSID_UUID = bluetooth.UUID('87654321-4321-4321-4321-cba987654321')
+_PASS_UUID = bluetooth.UUID('cba98765-4321-4321-4321-123456789abc')
+_SERVER_IP_UUID = bluetooth.UUID('11111111-2222-3333-4444-555555555555')
+_SERVER_PORT_UUID = bluetooth.UUID('99999999-8888-7777-6666-555555555555')
 
-# === Hardware reset ===
-rst.value(1)
-time.sleep_ms(50)
-rst.value(0)
-time.sleep_ms(50)
-rst.value(1)
-time.sleep_ms(150)
+_IRQ_CENTRAL_CONNECT = 1
+_IRQ_CENTRAL_DISCONNECT = 2
+_IRQ_GATTS_WRITE = 3
 
-# === GC9A01 Initialization Sequence (proven working for 240x240 round displays) ===
-send_command(0xEF)
-send_command(0xEB, b'\x14')
-send_command(0xFE)
-send_command(0xEF)
+ble = bluetooth.BLE()
+ble.active(True)
+print('BLE activated')
+gc.collect()
 
-send_command(0xEB, b'\x14')
-send_command(0x84, b'\x40')
-send_command(0x85, b'\xFF')
-send_command(0x86, b'\xFF')
-send_command(0x87, b'\xFF')
-send_command(0x88, b'\x0A')
-send_command(0x89, b'\x21')
-send_command(0x8A, b'\x00')
-send_command(0x8B, b'\x80')
-send_command(0x8C, b'\x01')
-send_command(0x8D, b'\x01')
-send_command(0x8E, b'\xFF')
-send_command(0x8F, b'\xFF')
+connected = False
+provisioned_ssid = None
+provisioned_pass = None
+provisioned_server_ip = '108.254.1.184'
+provisioned_server_port = '9019'
 
-send_command(0xB6, b'\x00\x00')
+ssid_handle = pass_handle = server_ip_handle = server_port_handle = None
 
-send_command(0x3A, b'\x55')  # 16-bit color (565)
+def ble_irq(event, data):
+    global connected, provisioned_ssid, provisioned_pass
+    global provisioned_server_ip, provisioned_server_port
+    if event == _IRQ_CENTRAL_CONNECT:
+        conn_handle, _, addr = data
+        print('Connected:', binascii.hexlify(addr).decode())
+        connected = True
+    elif event == _IRQ_CENTRAL_DISCONNECT:
+        print('Disconnected')
+        connected = False
+    elif event == _IRQ_GATTS_WRITE:
+        conn_handle, value_handle = data
+        try:
+            value = ble.gatts_read(value_handle)
+            decoded = value.decode('utf-8').rstrip('\x00')
+            if value_handle == ssid_handle:
+                provisioned_ssid = decoded
+                with open('/ssid.txt', 'w') as f: f.write(decoded)
+                print('SSID saved:', decoded)
+            elif value_handle == pass_handle:
+                provisioned_pass = decoded
+                with open('/pass.txt', 'w') as f: f.write(decoded)
+                print('Password saved')
+            elif value_handle == server_ip_handle:
+                provisioned_server_ip = decoded
+                with open('/server_ip.txt', 'w') as f: f.write(decoded)
+                print('Server IP saved:', decoded)
+            elif value_handle == server_port_handle:
+                provisioned_server_port = decoded
+                with open('/server_port.txt', 'w') as f: f.write(decoded)
+                print('Server port saved:', decoded)
+        except Exception as e:
+            print('IRQ error:', e)
 
-send_command(0x90, b'\x08\x08\x08\x08')
-send_command(0xBD, b'\x06')
-send_command(0xBC, b'\x00')
+ble.irq(ble_irq)
 
-send_command(0xFF, b'\x60\x01\x04')
-send_command(0xC3, b'\x13')
-send_command(0xC4, b'\x13')
+def register_services():
+    global ssid_handle, pass_handle, server_ip_handle, server_port_handle
+    chars = (
+        (_SSID_UUID, bluetooth.FLAG_WRITE_NO_RESPONSE),
+        (_PASS_UUID, bluetooth.FLAG_WRITE_NO_RESPONSE),
+        (_SERVER_IP_UUID, bluetooth.FLAG_WRITE_NO_RESPONSE),
+        (_SERVER_PORT_UUID, bluetooth.FLAG_WRITE_NO_RESPONSE),
+    )
+    handles = ble.gatts_register_services([(_SERVICE_UUID, chars)])[0]
+    ssid_handle, pass_handle, server_ip_handle, server_port_handle = handles
+    print('Services registered')
 
-send_command(0xC9, b'\x22')
-send_command(0xBE, b'\x11')
-send_command(0xE1, b'\x10\x0E')
+register_services()
+print('Ready - starting advertising')
+gc.collect()
 
-send_command(0xDF, b'\x21\x0c\x02')
+async def connect_wifi(ssid, password):
+    print('Free memory before WiFi:', gc.mem_free())
+    sta = network.WLAN(network.STA_IF)
+    if sta.isconnected():
+        print('Already connected:', sta.ifconfig()[0])
+        return True
+    sta.active(True)
+    sta.connect(ssid, password)
+    print(f'Connecting to WiFi "{ssid}"...')
+    for _ in range(30):
+        if sta.isconnected():
+            ip = sta.ifconfig()[0]
+            print('WiFi connected:', ip)
+            return True
+        await asyncio.sleep(1)
+    print('WiFi failed')
+    return False
 
-# Gamma settings (positive and negative)
-send_command(0xF0, b'\x45\x09\x08\x08\x26\x2A')
-send_command(0xF1, b'\x43\x70\x72\x36\x37\x6F')
-send_command(0xF2, b'\x45\x09\x08\x08\x26\x2A')
-send_command(0xF3, b'\x43\x70\x72\x36\x37\x6F')
+async def download_secondary():
+    url = f'http://{provisioned_server_ip}:{provisioned_server_port}/tertiary.mpy'
+    print(f'Downloading from {url}')
+    print('Free memory before download:', gc.mem_free())
+    for attempt in range(5):
+        try:
+            resp = urequests.get(url, timeout=10)
+            if resp.status_code == 200:
+                with open('/tertiary.mpy', 'wb') as f:
+                    f.write(resp.content)
+                print('Downloaded tertiary.mpy (' + str(len(resp.content)) + ' bytes)')
+                return True
+        except Exception as e:
+            print('Download error:', e)
+        await asyncio.sleep(5)
+    print('Download failed')
+    return False
 
-send_command(0xED, b'\x1B\x0B')
-send_command(0xAE, b'\x77')
-send_command(0xCD, b'\x63')
+async def run_secondary():
+    if await download_secondary():
+        gc.collect()
+        print('Free memory before import:', gc.mem_free())
+        try:
+            import secondary
+            print('tertiary.mpy running')
+        except Exception as e:
+            print('Import failed:', e)
+            import sys
+            sys.print_exception(e)
+            print('Free memory after failed import:', gc.mem_free())
 
-send_command(0x70, b'\x07\x07\x04\x0E\x0F\x09\x07\x08\x03')
+async def advertise_and_provision():
+    global connected
+    # Name in both adv and scan response
+    name = b'XH-C2X'
+    name_ad = bytes([len(name) + 1, 0x09]) + name
+    adv_data = bytearray()
+    adv_data += bytes([0x02, 0x01, 0x06])
+    adv_data += name_ad
+    adv_data += bytes([0x11, 0x07]) + bytes.fromhex('bc9a7856341234123412341278563412')
+    resp_data = bytearray()
+    resp_data += name_ad
 
-send_command(0xE8, b'\x34')
+    while True:
+        ble.gap_advertise(100_000, adv_data=adv_data, resp_data=resp_data, connectable=True)
+        print('Advertising - scan for XH-C2X')
+        while not connected:
+            await asyncio.sleep_ms(100)
 
-send_command(0x62, b'\x18\x0D\x71\xED\x70\x70\x18\x0F\x71\xEF\x70\x70')
-send_command(0x63, b'\x18\x11\x71\xF1\x70\x70\x18\x13\x71\xF3\x70\x70')
+        print('Connected - waiting for credentials...')
+        start = time.ticks_ms()
+        while time.ticks_diff(time.ticks_ms(), start) < 30000:
+            if provisioned_ssid and provisioned_pass:
+                print('Full credentials received! Proceeding to WiFi...')
+                ble.gap_advertise(None)  # Stop advertising immediately
+                if await connect_wifi(provisioned_ssid, provisioned_pass):
+                    await run_secondary()
+                return  # Exit loop - secondary takes over forever
+            await asyncio.sleep_ms(100)
 
-send_command(0x64, b'\x28\x29\xF1\x01\xF1\x00\x07')
+        print('Timeout - no full credentials')
+        ble.gap_advertise(None)
 
-send_command(0x66, b'\x3C\x00\xCD\x67\x45\x45\x10\x00\x00\x00')
-send_command(0x67, b'\x00\x3C\x00\x00\x00\x01\x54\x10\x32\x98')
+        # Optional: wait for disconnect before re-advertising
+        while connected:
+            await asyncio.sleep_ms(100)
 
-send_command(0x74, b'\x10\x85\x80\x00\x00\x4E\x00')
+async def main():
+    global provisioned_ssid, provisioned_pass, provisioned_server_ip, provisioned_server_port
+    gc.collect()
+    print('Free memory at start:', gc.mem_free())
+    try:
+        provisioned_ssid = open('/ssid.txt').read().strip()
+    except OSError: pass
+    try:
+        provisioned_pass = open('/pass.txt').read().strip()
+    except OSError: pass
+    try:
+        provisioned_server_ip = open('/server_ip.txt').read().strip() or '108.254.1.184'
+    except OSError: pass
+    try:
+        provisioned_server_port = open('/server_port.txt').read().strip() or '9019'
+    except OSError: pass
 
-send_command(0x98, b'\x3e\x07')
+    if provisioned_ssid and provisioned_pass:
+        print('Saved credentials found - connecting directly')
+        if await connect_wifi(provisioned_ssid, provisioned_pass):
+            await run_secondary()
+            return
 
-send_command(0x35)  # TEON (optional)
-send_command(0x21)  # Inversion ON - remove if colors look washed out
+    await advertise_and_provision()
 
-send_command(0x11)  # Sleep out
-time.sleep_ms(120)
-
-send_command(0x29)  # Display on
-time.sleep_ms(20)
-
-# === Window function (no offset for GC9A01) ===
-def set_window(x0, y0, x1, y1):
-    send_command(0x2A, bytes([0, x0, 0, x1]))
-    send_command(0x2B, bytes([0, y0, 0, y1]))
-    send_command(0x2C)
-
-# === Fill screen black ===
-set_window(0, 0, 239, 239)
-for _ in range(240 * 240):
-    send_byte(0x00, 1)  # Black pixel (RGB565: 0x0000)
-    send_byte(0x00, 1)
-
-# === Your font (unchanged) ===
-font = {
-    ' ': [0x00,0x00,0x00,0x00,0x00],
-    '0': [0x7C,0xA2,0x92,0x8A,0x7C],
-    '1': [0x00,0x42,0xFE,0x02,0x00],
-    '2': [0x42,0x86,0x8A,0x92,0x62],
-    '3': [0x84,0x82,0xA2,0xD2,0x8C],
-    '4': [0x18,0x28,0x48,0xFE,0x08],
-    '5': [0xE4,0xA2,0xA2,0xA2,0x9C],
-    '6': [0x3C,0x52,0x92,0x92,0x0C],
-    '7': [0x80,0x8E,0x90,0xA0,0xC0],
-    '8': [0x6C,0x92,0x92,0x92,0x6C],
-    '9': [0x60,0x92,0x92,0x94,0x78],
-    ':': [0x00,0x36,0x36,0x00,0x00],
-    '.': [0x00,0x00,0x00,0x06,0x06],
-    '$': [0x24,0x54,0xFE,0x54,0x48],
-    'A': [0x3E,0x48,0x48,0x48,0x3E],
-    'B': [0xFE,0x92,0x92,0x92,0x6C],
-    'C': [0x7C,0x82,0x82,0x82,0x44],
-    'D': [0xFE,0x82,0x82,0x82,0x7C],
-    'E': [0xFE,0x92,0x92,0x92,0x82],
-    'F': [0xFE,0x90,0x90,0x90,0x80],
-    'G': [0x7C,0x82,0x92,0x92,0x5C],
-    'H': [0xFE,0x10,0x10,0x10,0xFE],
-    'I': [0x00,0x82,0xFE,0x82,0x00],
-    'J': [0x04,0x02,0x82,0xFC,0x80],
-    'K': [0xFE,0x10,0x28,0x44,0x82],
-    'L': [0xFE,0x02,0x02,0x02,0x02],
-    'M': [0xFE,0x40,0x30,0x40,0xFE],
-    'N': [0xFE,0x20,0x10,0x08,0xFE],
-    'O': [0x7C,0x82,0x82,0x82,0x7C],
-    'P': [0xFE,0x90,0x90,0x90,0x60],
-    'Q': [0x7C,0x82,0x8A,0x84,0x7A],
-    'R': [0xFE,0x90,0x98,0x94,0x62],
-    'S': [0x62,0x92,0x92,0x92,0x8C],
-    'T': [0x80,0x80,0xFE,0x80,0x80],
-    'U': [0xFC,0x02,0x02,0x02,0xFC],
-    'V': [0xF8,0x04,0x02,0x04,0xF8],
-    'W': [0xFC,0x02,0x1C,0x02,0xFC],
-    'X': [0xC6,0x28,0x10,0x28,0xC6],
-    'Y': [0xE0,0x10,0x0E,0x10,0xE0],
-    'Z': [0x86,0x8A,0x92,0xA2,0xC2],
-}
-
-# === Draw text function (adapted - white pixels) ===
-def draw_text(x_start, y_start, text):
-    x = x_start
-    for char in text.upper():
-        if char in font:
-            bitmap = font[char]
-            for col in range(5):
-                bits = bitmap[col]
-                for row in range(8):
-                    if bits & (1 << (7 - row)):
-                        set_window(x + col, y_start + row, x + col, y_start + row)
-                        send_byte(0xFF, 1)  # White high byte
-                        send_byte(0xFF, 1)  # White low byte (0xFFFF)
-            x += 6  # 5px wide + 1px space
-
-# === Display "Hello World" centered ===
-draw_text(50, 110, "Hello World")
-
-# Optional: Keep the script running (or add a loop if you want animation later)
-while True:
-    time.sleep(1)
+asyncio.run(main())
