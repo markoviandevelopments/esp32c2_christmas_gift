@@ -203,36 +203,50 @@ def draw_text(x_start, y_start, text):
             x += 6
 
 
-# === Startup ===
-set_window(0, 0, 239, 239)
-for _ in range(240 * 240):
-    send_byte(0x00, 1)
-    send_byte(0x00, 1)
+# === Scale settings ===
+SRC_SIZE = 64
+SCALE = 3
+TOTAL_PIXELS = SRC_SIZE * SRC_SIZE
+CHUNKS = TOTAL_PIXELS // 16
 
-draw_text(60, 110, "Loading...")
-
-# === Server ===
-try:
-    server_ip = open('/server_ip.txt').read().strip()
-except OSError:
-    server_ip = '192.168.1.198'
-
-PHOTO_URL = f'http://{server_ip}:9025/image.raw'
+# === Stream pixel by pixel without clearing screen ===
+def update_photo():
+    base_url = PHOTO_URL.rsplit('/', 1)[0]  # http://ip:9025
+    offset_x = (240 - SRC_SIZE * SCALE) // 2
+    offset_y = (240 - SRC_SIZE * SCALE) // 2
+    
+    pixel_index = 0
+    for chunk_n in range(CHUNKS):
+        try:
+            url = f"{base_url}/pixel?n={chunk_n}"
+            r = urequests.get(url, timeout=15)
+            if r.status_code == 200 and len(r.content) == 32:  # 16 pixels
+                data = r.content
+                for i in range(0, 32, 2):
+                    high = data[i]
+                    low = data[i + 1]
+                    sx = pixel_index % SRC_SIZE
+                    sy = pixel_index // SRC_SIZE
+                    x = offset_x + sx * SCALE
+                    y = offset_y + sy * SCALE
+                    set_window(x, y, x + SCALE - 1, y + SCALE - 1)
+                    for _ in range(SCALE * SCALE):
+                        send_byte(high, 1)
+                        send_byte(low, 1)
+                    pixel_index += 1
+            r.close()
+        except:
+            return False
+    return pixel_index == TOTAL_PIXELS
 
 # === Main loop ===
 while True:
-    gc.collect()
-    if stream_and_display_photo():
+    success = update_photo()
+    if success:
         draw_text(40, 200, "Hello Preston")
         draw_text(50, 220, "& Willoh!")
         time.sleep(8)
-        stream_and_display_photo()  # Redraw without text
     else:
-        set_window(0, 0, 239, 239)
-        for _ in range(240 * 240):
-            send_byte(0x00, 1)
-            send_byte(0x00, 1)
         draw_text(40, 100, "No Photo")
         draw_text(20, 130, "Check Server")
-    
     time.sleep(52)
