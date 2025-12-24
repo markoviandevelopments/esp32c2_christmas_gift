@@ -1,9 +1,5 @@
 import time
 import machine
-import urequests
-import gc
-import network
-import os
 
 # === Pins ===
 sck = machine.Pin(8, machine.Pin.OUT)
@@ -26,7 +22,7 @@ def send_command(cmd, data=b''):
     for b in data:
         send_byte(b, 1)
 
-# === Reset & Init ===
+# === Reset ===
 rst.value(1)
 time.sleep_ms(50)
 rst.value(0)
@@ -34,7 +30,7 @@ time.sleep_ms(50)
 rst.value(1)
 time.sleep_ms(150)
 
-# Full GC9A01 init sequence
+# === GC9A01 Init Sequence ===
 send_command(0xEF)
 send_command(0xEB, b'\x14')
 send_command(0xFE)
@@ -53,7 +49,7 @@ send_command(0x8D, b'\x01')
 send_command(0x8E, b'\xFF')
 send_command(0x8F, b'\xFF')
 send_command(0xB6, b'\x00\x00')
-send_command(0x3A, b'\x55')
+send_command(0x3A, b'\x55')  # 16-bit color
 send_command(0x90, b'\x08\x08\x08\x08')
 send_command(0xBD, b'\x06')
 send_command(0xBC, b'\x00')
@@ -80,155 +76,54 @@ send_command(0x66, b'\x3C\x00\xCD\x67\x45\x45\x10\x00\x00\x00')
 send_command(0x67, b'\x00\x3C\x00\x00\x00\x01\x54\x10\x32\x98')
 send_command(0x74, b'\x10\x85\x80\x00\x00\x4E\x00')
 send_command(0x98, b'\x3e\x07')
-send_command(0x35)
-# Remove if colors look washed out
+send_command(0x35)  # TEON
+# NO send_command(0x21) — inversion OFF (critical fix)
 send_command(0x11)
 time.sleep_ms(120)
 send_command(0x29)
 time.sleep_ms(20)
 
-# === Window helpers ===
+# === Helpers ===
 def set_window(x0, y0, x1, y1):
     send_command(0x2A, bytes([0, x0, 0, x1]))
     send_command(0x2B, bytes([0, y0, 0, y1]))
     send_command(0x2C)
 
-def set_full_window():
-    send_command(0x2A, bytes([0, 0, 0, 239]))
-    send_command(0x2B, bytes([0, 0, 0, 239]))
-    send_command(0x2C)
+def fill_rect(x, y, w, h, r, g, b):
+    # Convert RGB888 to RGB565
+    color565 = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
+    high = color565 >> 8
+    low = color565 & 0xFF
+    
+    set_window(x, y, x + w - 1, y + h - 1)
+    for _ in range(w * h):
+        send_byte(high, 1)
+        send_byte(low, 1)
 
-def display_raw_rgb565(data):
-    set_full_window()
-    for i in range(0, len(data), 2):
-        send_byte(data[i], 1)
-        send_byte(data[i+1], 1)
+# === 3x3 Color Grid - Define your colors here (R, G, B 0-255) ===
+colors = [
+    [255, 0, 0],    # Red
+    [0, 255, 0],    # Green
+    [0, 0, 255],    # Blue
+    [255, 255, 0],  # Yellow
+    [255, 0, 255],  # Magenta
+    [0, 255, 255],  # Cyan
+    [255, 255, 255],# White
+    [128, 128, 128],# Gray
+    [0, 0, 0]       # Black
+]
 
-# === Font ===
-font = {
-    ' ': [0x00,0x00,0x00,0x00,0x00],
-    '0': [0x7C,0xA2,0x92,0x8A,0x7C],
-    '1': [0x00,0x42,0xFE,0x02,0x00],
-    '2': [0x42,0x86,0x8A,0x92,0x62],
-    '3': [0x84,0x82,0xA2,0xD2,0x8C],
-    '4': [0x18,0x28,0x48,0xFE,0x08],
-    '5': [0xE4,0xA2,0xA2,0xA2,0x9C],
-    '6': [0x3C,0x52,0x92,0x92,0x0C],
-    '7': [0x80,0x8E,0x90,0xA0,0xC0],
-    '8': [0x6C,0x92,0x92,0x92,0x6C],
-    '9': [0x60,0x92,0x92,0x94,0x78],
-    ':': [0x00,0x36,0x36,0x00,0x00],
-    '.': [0x00,0x00,0x00,0x06,0x06],
-    '$': [0x24,0x54,0xFE,0x54,0x48],
-    '!': [0x00,0x00,0xFD,0x00,0x00],
-    '-': [0x08,0x08,0x08,0x08,0x08],
-    'A': [0x3E,0x48,0x48,0x48,0x3E],
-    'B': [0xFE,0x92,0x92,0x92,0x6C],
-    'C': [0x7C,0x82,0x82,0x82,0x44],
-    'D': [0xFE,0x82,0x82,0x82,0x7C],
-    'E': [0xFE,0x92,0x92,0x92,0x82],
-    'F': [0xFE,0x90,0x90,0x90,0x80],
-    'G': [0x7C,0x82,0x92,0x92,0x5C],
-    'H': [0xFE,0x10,0x10,0x10,0xFE],
-    'I': [0x00,0x82,0xFE,0x82,0x00],
-    'J': [0x04,0x02,0x82,0xFC,0x80],
-    'K': [0xFE,0x10,0x28,0x44,0x82],
-    'L': [0xFE,0x02,0x02,0x02,0x02],
-    'M': [0xFE,0x40,0x30,0x40,0xFE],
-    'N': [0xFE,0x20,0x10,0x08,0xFE],
-    'O': [0x7C,0x82,0x82,0x82,0x7C],
-    'P': [0xFE,0x90,0x90,0x90,0x60],
-    'Q': [0x7C,0x82,0x8A,0x84,0x7A],
-    'R': [0xFE,0x90,0x98,0x94,0x62],
-    'S': [0x62,0x92,0x92,0x92,0x8C],
-    'T': [0x80,0x80,0xFE,0x80,0x80],
-    'U': [0xFC,0x02,0x02,0x02,0xFC],
-    'V': [0xF8,0x04,0x02,0x04,0xF8],
-    'W': [0xFC,0x02,0x1C,0x02,0xFC],
-    'X': [0xC6,0x28,0x10,0x28,0xC6],
-    'Y': [0xE0,0x10,0x0E,0x10,0xE0],
-    'Z': [0x86,0x8A,0x92,0xA2,0xC2],
-}
+# === Draw 3x3 grid (80x80 each) ===
+square_size = 80
+idx = 0
+for row in range(3):
+    for col in range(3):
+        r, g, b = colors[idx]
+        x = col * square_size
+        y = row * square_size
+        fill_rect(x, y, square_size, square_size, r, g, b)
+        idx += 1
 
-def draw_text(x_start, y_start, text):
-    x = x_start
-    for char in text.upper():
-        if char in font:
-            bitmap = font[char]
-            for col in range(5):
-                bits = bitmap[col]
-                for row in range(8):
-                    if bits & (1 << (7 - row)):
-                        set_window(x + col, y_start + row, x + col, y_start + row)
-                        send_byte(0xFF, 1)
-                        send_byte(0xFF, 1)
-            x += 6
-
-# === Clear screen black ===
-set_full_window()
-for _ in range(240 * 240):
-    send_byte(0x00, 1)
-    send_byte(0x00, 1)
-
-# === Show "Loading..." immediately ===
-draw_text(70, 110, "Loading...")
-
-# === Wait for WiFi with feedback ===
-def wait_for_wifi():
-    sta = network.WLAN(network.STA_IF)
-    if sta.isconnected():
-        draw_text(70, 140, "WiFi OK")
-        time.sleep(2)
-        return True
-    draw_text(50, 140, "Connecting.")
-    for i in range(40):
-        if sta.isconnected():
-            draw_text(60, 140, "WiFi OK!")
-            time.sleep(2)
-            return True
-        time.sleep(1)
-        # Animate dots
-        dots = "." * ((i // 5) % 4 + 1)
-        draw_text(110, 140, dots.ljust(4))
-    draw_text(50, 140, "No WiFi  ")
-    return False
-
-wait_for_wifi()
-
-# === Server config - photo port hardcoded to 9025 ===
-try:
-    server_ip = open('/server_ip.txt').read().strip()
-except OSError:
-    server_ip = '108.254.1.184'
-
-PHOTO_URL = f'http://{server_ip}:9025/image.raw'
-
-# === Main slideshow loop ===
+# === Loop forever (keeps display on) ===
 while True:
-    gc.collect()
-    success = False
-    try:
-        print("Fetching photo from:", PHOTO_URL)
-        r = urequests.get(PHOTO_URL, timeout=20)
-        if r.status_code == 200 and len(r.content) == 115200:
-            display_raw_rgb565(r.content)
-            print("Photo displayed")
-            draw_text(50, 110, "Hello World")
-            time.sleep(8)
-            display_raw_rgb565(r.content)  # Remove text overlay
-            success = True
-        else:
-            print("Bad response:", r.status_code, len(r.content))
-        r.close()
-    except Exception as e:
-        print("Fetch failed:", e)
-
-    if not success:
-        set_full_window()
-        for _ in range(240 * 240):
-            send_byte(0x00, 1)
-            send_byte(0x00, 1)
-        draw_text(40, 100, "No Photo!")
-        draw_text(20, 130, "Check Server/IP")
-
-    time.sleep(52)  # ~60 second cycle
+    time.sleep(1)
