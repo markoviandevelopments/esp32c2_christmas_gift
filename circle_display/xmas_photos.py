@@ -1,5 +1,5 @@
-# photo_server.py - Serves random 64x64 RGB565 images from ./photos/
-from flask import Flask, send_file, abort
+# photo_server.py - Chunked pixel server for low-RAM devices (64x64 debug version)
+from flask import Flask, send_file, abort, Response
 import os
 import random
 from PIL import Image
@@ -12,7 +12,9 @@ PHOTOS_DIR = '/home/preston/Desktop/x_mas_gift/circle_display/photos'
 CACHE_DIR = '/home/preston/Desktop/x_mas_gift/circle_display/.cache_photos_64'
 os.makedirs(CACHE_DIR, exist_ok=True)
 
-SIZE = 64  # Now 64x64
+SIZE = 64
+PIXELS = SIZE * SIZE  # 4096
+CHUNK_PIXELS = 16  # 16 pixels per request = 32 bytes
 
 def convert_to_rgb565(image_path):
     cache_path = os.path.join(CACHE_DIR, os.path.basename(image_path) + '.raw')
@@ -34,51 +36,70 @@ def convert_to_rgb565(image_path):
     
     with open(cache_path, 'wb') as f:
         f.write(raw_bytes)
-    print(f"Cached {cache_path} ({len(raw_bytes)} bytes = {SIZE}x{SIZE})")
+    print(f"Cached {cache_path}")
     return cache_path
 
-def get_available_images():
-    images = []
-    for file in os.listdir(PHOTOS_DIR):
-        if file.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp')):
-            full_path = os.path.join(PHOTOS_DIR, file)
-            images.append(full_path)
-    return images
+def get_random_image_raw():
+    images = [f for f in os.listdir(PHOTOS_DIR) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp'))]
+    if not images:
+        abort(404, "No photos")
+    chosen = random.choice(images)
+    return convert_to_rgb565(os.path.join(PHOTOS_DIR, chosen))
+
+# Cache the current image path
+current_raw_path = None
+
+def load_random_image():
+    global current_raw_path
+    current_raw_path = get_random_image_raw()
+
+load_random_image()  # Initial load
 
 @app.route('/')
 def index():
-    images = get_available_images()
-    if not images:
-        return "No photos in folder yet."
-    return "<h2>Available photos (64x64):</h2>" + "<br>".join([f"<li>{os.path.basename(p)}</li>" for p in images])
+    return f"<h2>Pixel server ready</h2><p>Serving 64x64 photo in chunks of {CHUNK_PIXELS} pixels</p><p>Use /pixel?n=0 to /pixel?n={PIXELS//CHUNK_PIXELS - 1}</p>"
 
-@app.route('/image.raw')
-def serve_random_image():
-    images = get_available_images()
-    if not images:
-        abort(404, "No photos found")
+@app.route('/pixel')
+def serve_pixel_chunk():
+    global current_raw_path
+    if current_raw_path is None:
+        load_random_image()
     
-    chosen = random.choice(images)
-    raw_path = convert_to_rgb565(chosen)
-    print(f"Serving 64x64 image: {os.path.basename(chosen)}")
-    return send_file(raw_path, mimetype='application/octet-stream')
+    try:
+        n = int(request.args.get('n', '0'))
+        if n < 0 or n >= (PIXELS // CHUNK_PIXELS):
+            abort(404)
+    except:
+        abort(400)
+    
+    start_byte = n * CHUNK_PIXELS * 2
+    end_byte = start_byte + CHUNK_PIXELS * 2
+    
+    with open(current_raw_path, 'rb') as f:
+        f.seek(start_byte)
+        chunk = f.read(CHUNK_PIXELS * 2)
+    
+    if len(chunk) != CHUNK_PIXELS * 2:
+        abort(500)
+    
+    # Optional: refresh image every 60 seconds
+    if time.time() % 60 < 1:
+        load_random_image()
+    
+    return Response(chunk, mimetype='application/octet-stream')
 
+# Background watcher for new photos
 def watcher():
     known = set()
     while True:
-        current = set(get_available_images())
-        new = current - known
-        for p in new:
-            try:
-                convert_to_rgb565(p)
-            except Exception as e:
-                print(f"Failed to convert {p}: {e}")
+        current = set(os.path.join(PHOTOS_DIR, f) for f in os.listdir(PHOTOS_DIR) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp')))
+        if current - known:
+            load_random_image()
         known = current
         time.sleep(10)
 
 if __name__ == '__main__':
     threading.Thread(target=watcher, daemon=True).start()
-    print(f"Photo server running — serving {SIZE}x{SIZE} RGB565 images")
-    print("http://0.0.0.0:9025/image.raw")
-    print(f"Drop images into: {PHOTOS_DIR}")
+    print("Pixel chunk server running — 16 pixels per request")
+    print("Use http://<ip>:9025/pixel?n=0 ...")
     app.run(host='0.0.0.0', port=9025)
