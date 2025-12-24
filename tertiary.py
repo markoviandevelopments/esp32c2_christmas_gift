@@ -86,7 +86,7 @@ time.sleep_ms(120)
 send_command(0x29)
 time.sleep_ms(20)
 
-send_command(0x36, b'\x04')  # Fix text direction
+send_command(0x36, b'\x00')  # Fix text direction
 
 # === Window ===
 def set_window(x0, y0, x1, y1):
