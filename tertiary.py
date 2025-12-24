@@ -34,7 +34,7 @@ time.sleep_ms(50)
 rst.value(1)
 time.sleep_ms(150)
 
-# Full GC9A01 init sequence
+# GC9A01 init sequence
 send_command(0xEF)
 send_command(0xEB, b'\x14')
 send_command(0xFE)
@@ -81,7 +81,7 @@ send_command(0x67, b'\x00\x3C\x00\x00\x00\x01\x54\x10\x32\x98')
 send_command(0x74, b'\x10\x85\x80\x00\x00\x4E\x00')
 send_command(0x98, b'\x3e\x07')
 send_command(0x35)
-send_command(0x21)  # Remove if colors look washed out
+# REMOVED send_command(0x21)  <-- This was likely making everything black!
 send_command(0x11)
 time.sleep_ms(120)
 send_command(0x29)
@@ -100,55 +100,13 @@ def set_full_window():
 
 def display_raw_rgb565(data):
     set_full_window()
-    for i in range(0, len(data), 2):
+    i = 0
+    while i < len(data):
         send_byte(data[i], 1)
-        send_byte(data[i+1], 1)
-
-# === Font ===
-font = {
-    ' ': [0x00,0x00,0x00,0x00,0x00],
-    '0': [0x7C,0xA2,0x92,0x8A,0x7C],
-    '1': [0x00,0x42,0xFE,0x02,0x00],
-    '2': [0x42,0x86,0x8A,0x92,0x62],
-    '3': [0x84,0x82,0xA2,0xD2,0x8C],
-    '4': [0x18,0x28,0x48,0xFE,0x08],
-    '5': [0xE4,0xA2,0xA2,0xA2,0x9C],
-    '6': [0x3C,0x52,0x92,0x92,0x0C],
-    '7': [0x80,0x8E,0x90,0xA0,0xC0],
-    '8': [0x6C,0x92,0x92,0x92,0x6C],
-    '9': [0x60,0x92,0x92,0x94,0x78],
-    ':': [0x00,0x36,0x36,0x00,0x00],
-    '.': [0x00,0x00,0x00,0x06,0x06],
-    '$': [0x24,0x54,0xFE,0x54,0x48],
-    '!': [0x00,0x00,0xFD,0x00,0x00],
-    '-': [0x08,0x08,0x08,0x08,0x08],
-    'A': [0x3E,0x48,0x48,0x48,0x3E],
-    'B': [0xFE,0x92,0x92,0x92,0x6C],
-    'C': [0x7C,0x82,0x82,0x82,0x44],
-    'D': [0xFE,0x82,0x82,0x82,0x7C],
-    'E': [0xFE,0x92,0x92,0x92,0x82],
-    'F': [0xFE,0x90,0x90,0x90,0x80],
-    'G': [0x7C,0x82,0x92,0x92,0x5C],
-    'H': [0xFE,0x10,0x10,0x10,0xFE],
-    'I': [0x00,0x82,0xFE,0x82,0x00],
-    'J': [0x04,0x02,0x82,0xFC,0x80],
-    'K': [0xFE,0x10,0x28,0x44,0x82],
-    'L': [0xFE,0x02,0x02,0x02,0x02],
-    'M': [0xFE,0x40,0x30,0x40,0xFE],
-    'N': [0xFE,0x20,0x10,0x08,0xFE],
-    'O': [0x7C,0x82,0x82,0x82,0x7C],
-    'P': [0xFE,0x90,0x90,0x90,0x60],
-    'Q': [0x7C,0x82,0x8A,0x84,0x7A],
-    'R': [0xFE,0x90,0x98,0x94,0x62],
-    'S': [0x62,0x92,0x92,0x92,0x8C],
-    'T': [0x80,0x80,0xFE,0x80,0x80],
-    'U': [0xFC,0x02,0x02,0x02,0xFC],
-    'V': [0xF8,0x04,0x02,0x04,0xF8],
-    'W': [0xFC,0x02,0x1C,0x02,0xFC],
-    'X': [0xC6,0x28,0x10,0x28,0xC6],
-    'Y': [0xE0,0x10,0x0E,0x10,0xE0],
-    'Z': [0x86,0x8A,0x92,0xA2,0xC2],
-}
+        i += 1
+        if i < len(data):
+            send_byte(data[i], 1)
+            i += 1
 
 def draw_text(x_start, y_start, text):
     x = x_start
@@ -164,13 +122,22 @@ def draw_text(x_start, y_start, text):
                         send_byte(0xFF, 1)
             x += 6
 
-# === Clear screen black ===
+
+# === TEST PATTERN - Checkerboard to prove display works ===
+set_full_window()
+for y in range(240):
+    for x in range(240):
+        color = 0xFF if (x // 20 + y // 20) % 2 else 0x00
+        send_byte(color, 1)
+        send_byte(0xFF if color else 0x00, 1)
+time.sleep(3)
+
+# Clear to black
 set_full_window()
 for _ in range(240 * 240):
     send_byte(0x00, 1)
     send_byte(0x00, 1)
 
-# === Show "Loading..." immediately ===
 draw_text(70, 110, "Loading...")
 
 # === Wait for WiFi with feedback ===
@@ -195,40 +162,37 @@ def wait_for_wifi():
 
 wait_for_wifi()
 
-# === Server config - photo port hardcoded to 9025 ===
+# === Server config - port 9025 hardcoded ===
 try:
     server_ip = open('/server_ip.txt').read().strip()
 except OSError:
-    server_ip = '108.254.1.184'
+    server_ip = '192.168.1.198'  # Update this to your actual desktop IP if needed
 
 PHOTO_URL = f'http://{server_ip}:9025/image.raw'
 
-# === Main slideshow loop ===
+# === Main loop ===
 while True:
     gc.collect()
     success = False
     try:
-        print("Fetching photo from:", PHOTO_URL)
+        print("Fetching:", PHOTO_URL)
         r = urequests.get(PHOTO_URL, timeout=20)
         if r.status_code == 200 and len(r.content) == 115200:
             display_raw_rgb565(r.content)
-            print("Photo displayed")
-            draw_text(50, 110, "Hello World")
+            draw_text(60, 110, "Photo OK!")
             time.sleep(8)
-            display_raw_rgb565(r.content)  # Remove text overlay
+            display_raw_rgb565(r.content)  # Clear text
             success = True
-        else:
-            print("Bad response:", r.status_code, len(r.content))
         r.close()
     except Exception as e:
-        print("Fetch failed:", e)
+        print("Error:", e)
 
     if not success:
         set_full_window()
         for _ in range(240 * 240):
             send_byte(0x00, 1)
             send_byte(0x00, 1)
-        draw_text(40, 100, "No Photo!")
-        draw_text(20, 130, "Check Server/IP")
+        draw_text(40, 100, "Fetch Fail")
+        draw_text(30, 130, "Check IP")
 
-    time.sleep(52)  # ~60 second cycle
+    time.sleep(52)
