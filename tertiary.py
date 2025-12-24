@@ -25,7 +25,7 @@ def send_command(cmd, data=b''):
     for b in data:
         send_byte(b, 1)
 
-# === Reset & Init (your working sequence) ===
+# === Reset & Init ===
 rst.value(1)
 time.sleep_ms(50)
 rst.value(0)
@@ -33,7 +33,7 @@ time.sleep_ms(50)
 rst.value(1)
 time.sleep_ms(150)
 
-# Full init sequence (unchanged)
+# Full init sequence (your working one)
 send_command(0xEF)
 send_command(0xEB, b'\x14')
 send_command(0xFE)
@@ -94,56 +94,51 @@ def set_window(x0, y0, x1, y1):
     send_command(0x2B, bytes([0, y0, 0, y1]))
     send_command(0x2C)
 
-# === Stream & scale display ===
+# === Pixel-by-pixel update (16 pixels per request) ===
 SRC_SIZE = 64
 SCALE = 3
-EXPECTED_BYTES = SRC_SIZE * SRC_SIZE * 2  # 8192
-CHUNK_SIZE = 512  # Small chunks for low RAM
+TOTAL_PIXELS = SRC_SIZE * SRC_SIZE
+CHUNKS = TOTAL_PIXELS // 16  # 256 chunks
 
-def stream_and_display_photo():
+def update_photo():
+    try:
+        server_ip = open('/server_ip.txt').read().strip()
+    except OSError:
+        server_ip = '192.168.1.198'
+    
+    base_url = f'http://{server_ip}:9025'
+    
     offset_x = (240 - SRC_SIZE * SCALE) // 2
     offset_y = (240 - SRC_SIZE * SCALE) // 2
     
-    # Clear screen
-    set_window(0, 0, 239, 239)
-    for _ in range(240 * 240):
-        send_byte(0x00, 1)
-        send_byte(0x00, 1)
-    
-    # Set window for scaled image
-    set_window(offset_x, offset_y, offset_x + SRC_SIZE * SCALE - 1, offset_y + SRC_SIZE * SCALE - 1)
-    
-    bytes_received = 0
-    try:
-        r = urequests.get(PHOTO_URL, timeout=30)
-        print("Status:", r.status_code)
-        if r.status_code != 200:
-            r.close()
-            return False
-        
-        while True:
-            chunk = r.read(CHUNK_SIZE)
-            if not chunk:
-                break
-            chunk_len = len(chunk)
-            if chunk_len % 2 != 0:
-                print("Odd chunk!")
+    pixel_index = 0
+    for chunk_n in range(CHUNKS):
+        try:
+            url = f"{base_url}/pixel?n={chunk_n}"
+            r = urequests.get(url, timeout=15)
+            if r.status_code == 200 and len(r.content) == 32:
+                data = r.content
+                for i in range(0, 32, 2):
+                    high = data[i]
+                    low = data[i + 1]
+                    sx = pixel_index % SRC_SIZE
+                    sy = pixel_index // SRC_SIZE
+                    x = offset_x + sx * SCALE
+                    y = offset_y + sy * SCALE
+                    set_window(x, y, x + SCALE - 1, y + SCALE - 1)
+                    for _ in range(SCALE * SCALE):
+                        send_byte(high, 1)
+                        send_byte(low, 1)
+                    pixel_index += 1
+            else:
+                print("Bad chunk:", r.status_code, len(r.content))
                 r.close()
                 return False
-            for i in range(0, chunk_len, 2):
-                high = chunk[i]
-                low = chunk[i + 1]
-                # Scale: draw SCALE x SCALE block
-                for _ in range(SCALE * SCALE):
-                    send_byte(high, 1)
-                    send_byte(low, 1)
-                bytes_received += 2
-        r.close()
-        print("Received bytes:", bytes_received)
-        return bytes_received == EXPECTED_BYTES
-    except Exception as e:
-        print("Stream error:", e)
-        return False
+            r.close()
+        except Exception as e:
+            print("Chunk error:", e)
+            return False
+    return pixel_index == TOTAL_PIXELS
 # === Font and text (from your working code) ===
 font = {
     ' ': [0x00,0x00,0x00,0x00,0x00],
@@ -202,47 +197,18 @@ def draw_text(x_start, y_start, text):
                         send_byte(0xFF, 1)
             x += 6
 
+# === Startup ===
+set_window(0, 0, 239, 239)
+for _ in range(240 * 240):
+    send_byte(0x00, 1)
+    send_byte(0x00, 1)
 
-# === Scale settings ===
-SRC_SIZE = 64
-SCALE = 3
-TOTAL_PIXELS = SRC_SIZE * SRC_SIZE
-CHUNKS = TOTAL_PIXELS // 16
-
-# === Stream pixel by pixel without clearing screen ===
-def update_photo():
-    base_url = PHOTO_URL.rsplit('/', 1)[0]  # http://ip:9025
-    offset_x = (240 - SRC_SIZE * SCALE) // 2
-    offset_y = (240 - SRC_SIZE * SCALE) // 2
-    
-    pixel_index = 0
-    for chunk_n in range(CHUNKS):
-        try:
-            url = f"{base_url}/pixel?n={chunk_n}"
-            r = urequests.get(url, timeout=15)
-            if r.status_code == 200 and len(r.content) == 32:  # 16 pixels
-                data = r.content
-                for i in range(0, 32, 2):
-                    high = data[i]
-                    low = data[i + 1]
-                    sx = pixel_index % SRC_SIZE
-                    sy = pixel_index // SRC_SIZE
-                    x = offset_x + sx * SCALE
-                    y = offset_y + sy * SCALE
-                    set_window(x, y, x + SCALE - 1, y + SCALE - 1)
-                    for _ in range(SCALE * SCALE):
-                        send_byte(high, 1)
-                        send_byte(low, 1)
-                    pixel_index += 1
-            r.close()
-        except:
-            return False
-    return pixel_index == TOTAL_PIXELS
+draw_text(60, 110, "Loading...")
 
 # === Main loop ===
 while True:
-    success = update_photo()
-    if success:
+    gc.collect()
+    if update_photo():
         draw_text(40, 200, "Hello Preston")
         draw_text(50, 220, "& Willoh!")
         time.sleep(8)
