@@ -25,7 +25,7 @@ def send_command(cmd, data=b''):
     for b in data:
         send_byte(b, 1)
 
-# === Reset ===
+# === Reset & Init (your working sequence) ===
 rst.value(1)
 time.sleep_ms(50)
 rst.value(0)
@@ -33,7 +33,7 @@ time.sleep_ms(50)
 rst.value(1)
 time.sleep_ms(150)
 
-# === GC9A01 Init (your working sequence) ===
+# (Full init sequence - same as your working Hello World)
 send_command(0xEF)
 send_command(0xEB, b'\x14')
 send_command(0xFE)
@@ -89,20 +89,39 @@ time.sleep_ms(20)
 # Fix backwards text
 send_command(0x36, b'\x04')
 
-# === Window & raw display ===
+# === Window ===
 def set_window(x0, y0, x1, y1):
     send_command(0x2A, bytes([0, x0, 0, x1]))
     send_command(0x2B, bytes([0, y0, 0, y1]))
     send_command(0x2C)
 
-def display_raw_rgb565(data, size=24):
-    # Center the 24x24 image on 240x240 screen
-    offset_x = (240 - size) // 2
-    offset_y = (240 - size) // 2
-    set_window(offset_x, offset_y, offset_x + size - 1, offset_y + size - 1)
-    for i in range(0, len(data), 2):
-        send_byte(data[i], 1)
-        send_byte(data[i+1], 1)
+# === Scale and display 64x64 photo full-screen (3x3 pixels per source pixel) ===
+def display_scaled_photo(data, src_size=64, scale=3):
+    # Clear screen
+    set_window(0, 0, 239, 239)
+    for _ in range(240 * 240):
+        send_byte(0x00, 1)
+        send_byte(0x00, 1)
+    
+    dest_size = src_size * scale
+    offset_x = (240 - dest_size) // 2
+    offset_y = (240 - dest_size) // 2
+    
+    i = 0
+    for sy in range(src_size):
+        for sx in range(src_size):
+            # Get one RGB565 pixel
+            high = data[i]
+            low = data[i + 1]
+            i += 2
+            
+            # Draw it as scale x scale block
+            x = offset_x + sx * scale
+            y = offset_y + sy * scale
+            set_window(x, y, x + scale - 1, y + scale - 1)
+            for _ in range(scale * scale):
+                send_byte(high, 1)
+                send_byte(low, 1)
 
 # === Font and text (from your working code) ===
 font = {
@@ -162,7 +181,7 @@ def draw_text(x_start, y_start, text):
                         send_byte(0xFF, 1)
             x += 6
 
-# === Initial black screen ===
+# === Startup ===
 set_window(0, 0, 239, 239)
 for _ in range(240 * 240):
     send_byte(0x00, 1)
@@ -170,7 +189,7 @@ for _ in range(240 * 240):
 
 draw_text(60, 110, "Loading...")
 
-# === Server config ===
+# === Server ===
 try:
     server_ip = open('/server_ip.txt').read().strip()
 except OSError:
@@ -178,25 +197,20 @@ except OSError:
 
 PHOTO_URL = f'http://{server_ip}:9025/image.raw'
 
-# === Main loop - debug 24x24 ===
+# === Main loop ===
 while True:
     gc.collect()
     success = False
     
     try:
-        print("Fetching 24x24 photo...")
+        print("Fetching 64x64 photo...")
         r = urequests.get(PHOTO_URL, timeout=20)
-        if r.status_code == 200 and len(r.content) == 1152:  # 24*24*2 = 1152 bytes
-            display_raw_rgb565(r.content, size=24)
-            draw_text(40, 180, "Photo OK!")
+        if r.status_code == 200 and len(r.content) == 8192:  # 64*64*2
+            display_scaled_photo(r.content, src_size=64, scale=3)
+            draw_text(40, 200, "Photo OK!")
             success = True
             time.sleep(8)
-            # Clear message
-            set_window(0, 0, 239, 239)
-            for _ in range(240 * 240):
-                send_byte(0x00, 1)
-                send_byte(0x00, 1)
-            display_raw_rgb565(r.content, size=24)
+            display_scaled_photo(r.content, src_size=64, scale=3)  # Clear text
         r.close()
     except Exception as e:
         print("Error:", e)
@@ -209,4 +223,4 @@ while True:
         draw_text(40, 100, "No Photo")
         draw_text(20, 130, "Check Server")
     
-    time.sleep(20)  # Faster cycle for debugging
+    time.sleep(30)  # Faster for testing
