@@ -1,13 +1,15 @@
 import time
 import machine
+import urequests
+import gc
 
-# === Pins (same as your working code) ===
+# === Pins ===
 sck = machine.Pin(8, machine.Pin.OUT)
 mosi = machine.Pin(20, machine.Pin.OUT)
 dc = machine.Pin(9, machine.Pin.OUT)
 rst = machine.Pin(19, machine.Pin.OUT)
 
-# === Bit-bang functions (identical to your working code) ===
+# === Bit-bang SPI ===
 def send_byte(byte, is_data):
     dc.value(is_data)
     for _ in range(8):
@@ -22,7 +24,7 @@ def send_command(cmd, data=b''):
     for b in data:
         send_byte(b, 1)
 
-# === Hardware reset ===
+# === Reset & GC9A01 init (same as before) ===
 rst.value(1)
 time.sleep_ms(50)
 rst.value(0)
@@ -30,12 +32,11 @@ time.sleep_ms(50)
 rst.value(1)
 time.sleep_ms(150)
 
-# === GC9A01 Initialization Sequence (proven working for 240x240 round displays) ===
+# (Full init sequence – unchanged from your working version)
 send_command(0xEF)
 send_command(0xEB, b'\x14')
 send_command(0xFE)
 send_command(0xEF)
-
 send_command(0xEB, b'\x14')
 send_command(0x84, b'\x40')
 send_command(0x85, b'\xFF')
@@ -49,73 +50,53 @@ send_command(0x8C, b'\x01')
 send_command(0x8D, b'\x01')
 send_command(0x8E, b'\xFF')
 send_command(0x8F, b'\xFF')
-
 send_command(0xB6, b'\x00\x00')
-
-send_command(0x3A, b'\x55')  # 16-bit color (565)
-
+send_command(0x3A, b'\x55')
 send_command(0x90, b'\x08\x08\x08\x08')
 send_command(0xBD, b'\x06')
 send_command(0xBC, b'\x00')
-
 send_command(0xFF, b'\x60\x01\x04')
 send_command(0xC3, b'\x13')
 send_command(0xC4, b'\x13')
-
 send_command(0xC9, b'\x22')
 send_command(0xBE, b'\x11')
 send_command(0xE1, b'\x10\x0E')
-
 send_command(0xDF, b'\x21\x0c\x02')
-
-# Gamma settings (positive and negative)
 send_command(0xF0, b'\x45\x09\x08\x08\x26\x2A')
 send_command(0xF1, b'\x43\x70\x72\x36\x37\x6F')
 send_command(0xF2, b'\x45\x09\x08\x08\x26\x2A')
 send_command(0xF3, b'\x43\x70\x72\x36\x37\x6F')
-
 send_command(0xED, b'\x1B\x0B')
 send_command(0xAE, b'\x77')
 send_command(0xCD, b'\x63')
-
 send_command(0x70, b'\x07\x07\x04\x0E\x0F\x09\x07\x08\x03')
-
 send_command(0xE8, b'\x34')
-
 send_command(0x62, b'\x18\x0D\x71\xED\x70\x70\x18\x0F\x71\xEF\x70\x70')
 send_command(0x63, b'\x18\x11\x71\xF1\x70\x70\x18\x13\x71\xF3\x70\x70')
-
 send_command(0x64, b'\x28\x29\xF1\x01\xF1\x00\x07')
-
 send_command(0x66, b'\x3C\x00\xCD\x67\x45\x45\x10\x00\x00\x00')
 send_command(0x67, b'\x00\x3C\x00\x00\x00\x01\x54\x10\x32\x98')
-
 send_command(0x74, b'\x10\x85\x80\x00\x00\x4E\x00')
-
 send_command(0x98, b'\x3e\x07')
-
-send_command(0x35)  # TEON (optional)
-send_command(0x21)  # Inversion ON - remove if colors look washed out
-
-send_command(0x11)  # Sleep out
+send_command(0x35)
+send_command(0x21)  # Remove if colors look bad
+send_command(0x11)
 time.sleep_ms(120)
-
-send_command(0x29)  # Display on
+send_command(0x29)
 time.sleep_ms(20)
 
-# === Window function (no offset for GC9A01) ===
-def set_window(x0, y0, x1, y1):
-    send_command(0x2A, bytes([0, x0, 0, x1]))
-    send_command(0x2B, bytes([0, y0, 0, y1]))
+# === Helper: full-screen window + raw pixel write ===
+def set_full_window():
+    send_command(0x2A, bytes([0, 0, 0, 239]))
+    send_command(0x2B, bytes([0, 0, 0, 239]))
     send_command(0x2C)
 
-# === Fill screen black ===
-set_window(0, 0, 239, 239)
-for _ in range(240 * 240):
-    send_byte(0x00, 1)  # Black pixel (RGB565: 0x0000)
-    send_byte(0x00, 1)
+def display_raw_rgb565(data):
+    set_full_window()
+    for i in range(0, len(data), 2):
+        send_byte(data[i], 1)      # high byte
+        send_byte(data[i+1], 1)    # low byte
 
-# === Your font (unchanged) ===
 font = {
     ' ': [0x00,0x00,0x00,0x00,0x00],
     '0': [0x7C,0xA2,0x92,0x8A,0x7C],
@@ -158,8 +139,6 @@ font = {
     'Y': [0xE0,0x10,0x0E,0x10,0xE0],
     'Z': [0x86,0x8A,0x92,0xA2,0xC2],
 }
-
-# === Draw text function (adapted - white pixels) ===
 def draw_text(x_start, y_start, text):
     x = x_start
     for char in text.upper():
@@ -170,13 +149,35 @@ def draw_text(x_start, y_start, text):
                 for row in range(8):
                     if bits & (1 << (7 - row)):
                         set_window(x + col, y_start + row, x + col, y_start + row)
-                        send_byte(0xFF, 1)  # White high byte
-                        send_byte(0xFF, 1)  # White low byte (0xFFFF)
-            x += 6  # 5px wide + 1px space
+                        send_byte(0xFF, 1)
+                        send_byte(0xFF, 1)
+            x += 6
 
-# === Display "Hello World" centered ===
-draw_text(50, 110, "Hello World")
+def set_window(x0, y0, x1, y1):
+    send_command(0x2A, bytes([0, x0, 0, x1]))
+    send_command(0x2B, bytes([0, y0, 0, y1]))
+    send_command(0x2C)
 
-# Optional: Keep the script running (or add a loop if you want animation later)
+# === Main loop ===
+SERVER_IP = open('/server_ip.txt').read().strip() if os.path.exists('/server_ip.txt') else '108.254.1.184'
+PHOTO_URL = f'http://{SERVER_IP}:9025/image.raw'
+
 while True:
-    time.sleep(1)
+    gc.collect()
+    print("Fetching new photo...")
+    try:
+        r = urequests.get(PHOTO_URL, timeout=15)
+        if r.status_code == 200 and len(r.content) == 240*240*2:  # 115200 bytes
+            display_raw_rgb565(r.content)
+            print("Photo displayed")
+            # Show "Hello World" overlay for 8 seconds
+            draw_text(50, 110, "Hello World")
+            time.sleep(8)
+            # Clear text (redraw just the photo)
+            display_raw_rgb565(r.content)
+        r.close()
+    except Exception as e:
+        print("Photo fetch failed:", e)
+        draw_text(20, 100, "No Photo")
+    
+    time.sleep(52)  # Total cycle ≈60 seconds
