@@ -166,7 +166,7 @@ wait_for_wifi()
 try:
     server_ip = open('/server_ip.txt').read().strip()
 except OSError:
-    server_ip = '192.168.1.198'  # Update this to your actual desktop IP if needed
+    server_ip = '108.254.1.184'  # Update this to your actual desktop IP if needed
 
 PHOTO_URL = f'http://{server_ip}:9025/image.raw'
 
