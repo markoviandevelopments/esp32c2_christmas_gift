@@ -1,4 +1,4 @@
-# photo_server.py - Debug version: serves random 24x24 RGB565 images from ./photos/
+# photo_server.py - Serves random 64x64 RGB565 images from ./photos/
 from flask import Flask, send_file, abort
 import os
 import random
@@ -9,10 +9,10 @@ import time
 app = Flask(__name__)
 
 PHOTOS_DIR = '/home/preston/Desktop/x_mas_gift/circle_display/photos'
-CACHE_DIR = '/home/preston/Desktop/x_mas_gift/circle_display/.cache_photos_24'
+CACHE_DIR = '/home/preston/Desktop/x_mas_gift/circle_display/.cache_photos_64'
 os.makedirs(CACHE_DIR, exist_ok=True)
 
-SIZE = 24  # Debug size
+SIZE = 64  # Now 64x64
 
 def convert_to_rgb565(image_path):
     cache_path = os.path.join(CACHE_DIR, os.path.basename(image_path) + '.raw')
@@ -22,12 +22,6 @@ def convert_to_rgb565(image_path):
     print(f"Converting {image_path} to {SIZE}x{SIZE} RGB565...")
     img = Image.open(image_path).convert('RGB')
     img = img.resize((SIZE, SIZE), Image.LANCZOS)
-    
-    # Center crop if needed (though resize already handles aspect)
-    width, height = img.size
-    left = (width - SIZE) // 2
-    top = (height - SIZE) // 2
-    img = img.crop((left, top, left + SIZE, top + SIZE))
     
     pixels = img.load()
     raw_bytes = bytearray()
@@ -40,7 +34,7 @@ def convert_to_rgb565(image_path):
     
     with open(cache_path, 'wb') as f:
         f.write(raw_bytes)
-    print(f"Cached {cache_path} ({len(raw_bytes)} bytes)")
+    print(f"Cached {cache_path} ({len(raw_bytes)} bytes = {SIZE}x{SIZE})")
     return cache_path
 
 def get_available_images():
@@ -56,7 +50,7 @@ def index():
     images = get_available_images()
     if not images:
         return "No photos in folder yet."
-    return "<h2>Available photos:</h2>" + "<br>".join([f"<li>{os.path.basename(p)}</li>" for p in images])
+    return "<h2>Available photos (64x64):</h2>" + "<br>".join([f"<li>{os.path.basename(p)}</li>" for p in images])
 
 @app.route('/image.raw')
 def serve_random_image():
@@ -66,10 +60,9 @@ def serve_random_image():
     
     chosen = random.choice(images)
     raw_path = convert_to_rgb565(chosen)
-    print(f"Serving {SIZE}x{SIZE} image: {os.path.basename(chosen)}")
+    print(f"Serving 64x64 image: {os.path.basename(chosen)}")
     return send_file(raw_path, mimetype='application/octet-stream')
 
-# Background pre-converter
 def watcher():
     known = set()
     while True:
@@ -85,7 +78,7 @@ def watcher():
 
 if __name__ == '__main__':
     threading.Thread(target=watcher, daemon=True).start()
-    print(f"Debug photo server running — serving {SIZE}x{SIZE} RGB565 images")
+    print(f"Photo server running — serving {SIZE}x{SIZE} RGB565 images")
     print("http://0.0.0.0:9025/image.raw")
     print(f"Drop images into: {PHOTOS_DIR}")
     app.run(host='0.0.0.0', port=9025)
