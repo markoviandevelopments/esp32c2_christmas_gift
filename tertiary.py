@@ -25,7 +25,7 @@ def send_command(cmd, data=b''):
     for b in data:
         send_byte(b, 1)
 
-# === Reset & Init (your exact working sequence) ===
+# === Reset & Init (your working sequence) ===
 rst.value(1)
 time.sleep_ms(50)
 rst.value(0)
@@ -33,7 +33,7 @@ time.sleep_ms(50)
 rst.value(1)
 time.sleep_ms(150)
 
-# Full init sequence (unchanged from working version)
+# Full init sequence (unchanged)
 send_command(0xEF)
 send_command(0xEB, b'\x14')
 send_command(0xFE)
@@ -80,7 +80,7 @@ send_command(0x67, b'\x00\x3C\x00\x00\x00\x01\x54\x10\x32\x98')
 send_command(0x74, b'\x10\x85\x80\x00\x00\x4E\x00')
 send_command(0x98, b'\x3e\x07')
 send_command(0x35)
-send_command(0x21)  # Inversion ON
+send_command(0x21)
 send_command(0x11)
 time.sleep_ms(120)
 send_command(0x29)
@@ -94,12 +94,13 @@ def set_window(x0, y0, x1, y1):
     send_command(0x2B, bytes([0, y0, 0, y1]))
     send_command(0x2C)
 
-# === Stream & scale display (64x64 with 3x3 scaling) ===
+# === Stream & scale display ===
 SRC_SIZE = 64
 SCALE = 3
 EXPECTED_BYTES = SRC_SIZE * SRC_SIZE * 2  # 8192
+CHUNK_SIZE = 512  # Small chunks for low RAM
 
-def stream_and_display():
+def stream_and_display_photo():
     offset_x = (240 - SRC_SIZE * SCALE) // 2
     offset_y = (240 - SRC_SIZE * SCALE) // 2
     
@@ -114,25 +115,31 @@ def stream_and_display():
     
     bytes_received = 0
     try:
-        print("Opening stream...")
-        with urequests.get(PHOTO_URL, stream=True, timeout=30) as r:
-            print("Status:", r.status_code)
-            if r.status_code != 200:
+        r = urequests.get(PHOTO_URL, timeout=30)
+        print("Status:", r.status_code)
+        if r.status_code != 200:
+            r.close()
+            return False
+        
+        while True:
+            chunk = r.read(CHUNK_SIZE)
+            if not chunk:
+                break
+            chunk_len = len(chunk)
+            if chunk_len % 2 != 0:
+                print("Odd chunk!")
+                r.close()
                 return False
-            for chunk in r:
-                chunk_len = len(chunk)
-                if chunk_len % 2 != 0:
-                    print("Odd chunk length!")
-                    return False
-                for i in range(0, chunk_len, 2):
-                    high = chunk[i]
-                    low = chunk[i + 1]
-                    # Scale pixel SCALE x SCALE
-                    for _ in range(SCALE * SCALE):
-                        send_byte(high, 1)
-                        send_byte(low, 1)
-                    bytes_received += 2
-        print("Received:", bytes_received, "bytes")
+            for i in range(0, chunk_len, 2):
+                high = chunk[i]
+                low = chunk[i + 1]
+                # Scale: draw SCALE x SCALE block
+                for _ in range(SCALE * SCALE):
+                    send_byte(high, 1)
+                    send_byte(low, 1)
+                bytes_received += 2
+        r.close()
+        print("Received bytes:", bytes_received)
         return bytes_received == EXPECTED_BYTES
     except Exception as e:
         print("Stream error:", e)
@@ -194,6 +201,8 @@ def draw_text(x_start, y_start, text):
                         send_byte(0xFF, 1)
                         send_byte(0xFF, 1)
             x += 6
+
+
 # === Startup ===
 set_window(0, 0, 239, 239)
 for _ in range(240 * 240):
@@ -213,12 +222,11 @@ PHOTO_URL = f'http://{server_ip}:9025/image.raw'
 # === Main loop ===
 while True:
     gc.collect()
-    print("Starting fetch cycle...")
-    if stream_and_display():
+    if stream_and_display_photo():
         draw_text(40, 200, "Hello Preston")
         draw_text(50, 220, "& Willoh!")
         time.sleep(8)
-        stream_and_display()  # Redraw without text
+        stream_and_display_photo()  # Redraw without text
     else:
         set_window(0, 0, 239, 239)
         for _ in range(240 * 240):
