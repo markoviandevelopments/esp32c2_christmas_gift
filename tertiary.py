@@ -1,13 +1,13 @@
 import time
 import machine
 
-# === Pins (same as your working code) ===
+# === Pins ===
 sck = machine.Pin(8, machine.Pin.OUT)
 mosi = machine.Pin(20, machine.Pin.OUT)
 dc = machine.Pin(9, machine.Pin.OUT)
 rst = machine.Pin(19, machine.Pin.OUT)
 
-# === Bit-bang functions (identical to your working code) ===
+# === Bit-bang SPI ===
 def send_byte(byte, is_data):
     dc.value(is_data)
     for _ in range(8):
@@ -22,7 +22,7 @@ def send_command(cmd, data=b''):
     for b in data:
         send_byte(b, 1)
 
-# === Hardware reset ===
+# === Reset ===
 rst.value(1)
 time.sleep_ms(50)
 rst.value(0)
@@ -30,12 +30,11 @@ time.sleep_ms(50)
 rst.value(1)
 time.sleep_ms(150)
 
-# === GC9A01 Initialization Sequence (proven working for 240x240 round displays) ===
+# === GC9A01 Init Sequence ===
 send_command(0xEF)
 send_command(0xEB, b'\x14')
 send_command(0xFE)
 send_command(0xEF)
-
 send_command(0xEB, b'\x14')
 send_command(0x84, b'\x40')
 send_command(0x85, b'\xFF')
@@ -49,73 +48,61 @@ send_command(0x8C, b'\x01')
 send_command(0x8D, b'\x01')
 send_command(0x8E, b'\xFF')
 send_command(0x8F, b'\xFF')
-
 send_command(0xB6, b'\x00\x00')
-
-send_command(0x3A, b'\x55')  # 16-bit color (565)
-
+send_command(0x3A, b'\x55')
 send_command(0x90, b'\x08\x08\x08\x08')
 send_command(0xBD, b'\x06')
 send_command(0xBC, b'\x00')
-
 send_command(0xFF, b'\x60\x01\x04')
 send_command(0xC3, b'\x13')
 send_command(0xC4, b'\x13')
-
 send_command(0xC9, b'\x22')
 send_command(0xBE, b'\x11')
 send_command(0xE1, b'\x10\x0E')
-
 send_command(0xDF, b'\x21\x0c\x02')
-
-# Gamma settings (positive and negative)
 send_command(0xF0, b'\x45\x09\x08\x08\x26\x2A')
 send_command(0xF1, b'\x43\x70\x72\x36\x37\x6F')
 send_command(0xF2, b'\x45\x09\x08\x08\x26\x2A')
 send_command(0xF3, b'\x43\x70\x72\x36\x37\x6F')
-
 send_command(0xED, b'\x1B\x0B')
 send_command(0xAE, b'\x77')
 send_command(0xCD, b'\x63')
-
 send_command(0x70, b'\x07\x07\x04\x0E\x0F\x09\x07\x08\x03')
-
 send_command(0xE8, b'\x34')
-
 send_command(0x62, b'\x18\x0D\x71\xED\x70\x70\x18\x0F\x71\xEF\x70\x70')
 send_command(0x63, b'\x18\x11\x71\xF1\x70\x70\x18\x13\x71\xF3\x70\x70')
-
 send_command(0x64, b'\x28\x29\xF1\x01\xF1\x00\x07')
-
 send_command(0x66, b'\x3C\x00\xCD\x67\x45\x45\x10\x00\x00\x00')
 send_command(0x67, b'\x00\x3C\x00\x00\x00\x01\x54\x10\x32\x98')
-
 send_command(0x74, b'\x10\x85\x80\x00\x00\x4E\x00')
-
 send_command(0x98, b'\x3e\x07')
-
-send_command(0x35)  # TEON (optional)
-send_command(0x21)  # Inversion ON - remove if colors look washed out
-
-send_command(0x11)  # Sleep out
+send_command(0x35)
+# REMOVED: send_command(0x21)  <-- This was making the screen black!
+send_command(0x11)
 time.sleep_ms(120)
-
-send_command(0x29)  # Display on
+send_command(0x29)
 time.sleep_ms(20)
 
-# === Window function (no offset for GC9A01) ===
+# === Window function ===
 def set_window(x0, y0, x1, y1):
     send_command(0x2A, bytes([0, x0, 0, x1]))
     send_command(0x2B, bytes([0, y0, 0, y1]))
     send_command(0x2C)
 
-# === Fill screen black ===
+# === Quick test: flash full red screen (proves display works) ===
 set_window(0, 0, 239, 239)
 for _ in range(240 * 240):
-    send_byte(0x00, 1)  # Black pixel (RGB565: 0x0000)
+    send_byte(0xF8, 1)  # Red high byte
+    send_byte(0x00, 1)  # Red low byte
+time.sleep(2)
+
+# === Fill black ===
+set_window(0, 0, 239, 239)
+for _ in range(240 * 240):
+    send_byte(0x00, 1)
     send_byte(0x00, 1)
 
-# === Your font (unchanged) ===
+# === Font and draw_text ===
 font = {
     ' ': [0x00,0x00,0x00,0x00,0x00],
     '0': [0x7C,0xA2,0x92,0x8A,0x7C],
@@ -159,7 +146,6 @@ font = {
     'Z': [0x86,0x8A,0x92,0xA2,0xC2],
 }
 
-# === Draw text function (adapted - white pixels) ===
 def draw_text(x_start, y_start, text):
     x = x_start
     for char in text.upper():
@@ -170,13 +156,12 @@ def draw_text(x_start, y_start, text):
                 for row in range(8):
                     if bits & (1 << (7 - row)):
                         set_window(x + col, y_start + row, x + col, y_start + row)
-                        send_byte(0xFF, 1)  # White high byte
-                        send_byte(0xFF, 1)  # White low byte (0xFFFF)
-            x += 6  # 5px wide + 1px space
+                        send_byte(0xFF, 1)  # White
+                        send_byte(0xFF, 1)
+            x += 6
 
-# === Display "Hello World" centered ===
+# === Display "Hello World" ===
 draw_text(50, 110, "Hello World")
 
-# Optional: Keep the script running (or add a loop if you want animation later)
 while True:
     time.sleep(1)
