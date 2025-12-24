@@ -22,15 +22,15 @@ def send_command(cmd, data=b''):
     for b in data:
         send_byte(b, 1)
 
-# === Hardware reset ===
+# === Reset ===
 rst.value(1)
-time.sleep_ms(50)
+time.sleep_ms(100)
 rst.value(0)
-time.sleep_ms(50)
+time.sleep_ms(100)
 rst.value(1)
-time.sleep_ms(150)
+time.sleep_ms(200)
 
-# === GC9A01 init sequence (inversion OFF — critical for most panels) ===
+# === GC9A01 Init (inversion ON + MADCTL added) ===
 send_command(0xEF)
 send_command(0xEB, b'\x14')
 send_command(0xFE)
@@ -49,7 +49,7 @@ send_command(0x8D, b'\x01')
 send_command(0x8E, b'\xFF')
 send_command(0x8F, b'\xFF')
 send_command(0xB6, b'\x00\x00')
-send_command(0x3A, b'\x55')  # 16-bit color
+send_command(0x3A, b'\x55')
 send_command(0x90, b'\x08\x08\x08\x08')
 send_command(0xBD, b'\x06')
 send_command(0xBC, b'\x00')
@@ -76,24 +76,21 @@ send_command(0x66, b'\x3C\x00\xCD\x67\x45\x45\x10\x00\x00\x00')
 send_command(0x67, b'\x00\x3C\x00\x00\x00\x01\x54\x10\x32\x98')
 send_command(0x74, b'\x10\x85\x80\x00\x00\x4E\x00')
 send_command(0x98, b'\x3e\x07')
-send_command(0x35)  # TEON
-# NO inversion command — removed on purpose
-send_command(0x11)  # Sleep out
-time.sleep_ms(120)
-send_command(0x29)  # Display on
-time.sleep_ms(20)
+send_command(0x35)
+send_command(0x21)  # Inversion ON — try this
+send_command(0x36, b'\x00')  # MADCTL: standard portrait, RGB order
+send_command(0x11)
+time.sleep_ms(150)
+send_command(0x29)
+time.sleep_ms(50)
 
-# === Set full window and fill with white (0xFFFF) ===
-def fill_white():
-    send_command(0x2A, bytes([0, 0, 0, 239]))  # CASET 0-239
-    send_command(0x2B, bytes([0, 0, 0, 239]))  # RASET 0-239
-    send_command(0x2C)  # RAMWR
-    for _ in range(240 * 240):
-        send_byte(0xFF, 1)  # High byte of white
-        send_byte(0xFF, 1)  # Low byte of white
+# === Fill screen bright green (easy to see) ===
+send_command(0x2A, bytes([0, 0, 0, 239]))
+send_command(0x2B, bytes([0, 0, 0, 239]))
+send_command(0x2C)
+for _ in range(240 * 240):
+    send_byte(0x07, 1)  # Green high byte
+    send_byte(0xE0, 1)  # Green low byte (0x07E0 = full green)
 
-fill_white()
-
-# Keep running forever
 while True:
     time.sleep(1)
