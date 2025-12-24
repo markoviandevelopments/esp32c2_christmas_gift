@@ -25,7 +25,7 @@ def send_command(cmd, data=b''):
     for b in data:
         send_byte(b, 1)
 
-# === Reset & Init (your working sequence) ===
+# === Reset & Init (your exact working sequence) ===
 rst.value(1)
 time.sleep_ms(50)
 rst.value(0)
@@ -33,7 +33,7 @@ time.sleep_ms(50)
 rst.value(1)
 time.sleep_ms(150)
 
-# Full init (same as working)
+# Full init sequence (unchanged from working version)
 send_command(0xEF)
 send_command(0xEB, b'\x14')
 send_command(0xFE)
@@ -94,12 +94,12 @@ def set_window(x0, y0, x1, y1):
     send_command(0x2B, bytes([0, y0, 0, y1]))
     send_command(0x2C)
 
-# === Stream and scale display (no full image in RAM) ===
+# === Stream & scale display (64x64 with 3x3 scaling) ===
 SRC_SIZE = 64
-SCALE = 3  # 64*3 = 192, centered
-EXPECTED_BYTES = SRC_SIZE * SRC_SIZE * 2  # 8192 for 64x64
+SCALE = 3
+EXPECTED_BYTES = SRC_SIZE * SRC_SIZE * 2  # 8192
 
-def stream_and_display_photo():
+def stream_and_display():
     offset_x = (240 - SRC_SIZE * SCALE) // 2
     offset_y = (240 - SRC_SIZE * SCALE) // 2
     
@@ -109,27 +109,33 @@ def stream_and_display_photo():
         send_byte(0x00, 1)
         send_byte(0x00, 1)
     
-    # Open full window for streaming
+    # Set window for scaled image
     set_window(offset_x, offset_y, offset_x + SRC_SIZE * SCALE - 1, offset_y + SRC_SIZE * SCALE - 1)
     
     bytes_received = 0
     try:
-        with urequests.get(PHOTO_URL, stream=True, timeout=20) as r:
+        print("Opening stream...")
+        with urequests.get(PHOTO_URL, stream=True, timeout=30) as r:
+            print("Status:", r.status_code)
             if r.status_code != 200:
                 return False
             for chunk in r:
-                if len(chunk) % 2 != 0:
-                    return False  # Corrupt
-                for i in range(0, len(chunk), 2):
+                chunk_len = len(chunk)
+                if chunk_len % 2 != 0:
+                    print("Odd chunk length!")
+                    return False
+                for i in range(0, chunk_len, 2):
                     high = chunk[i]
                     low = chunk[i + 1]
-                    # Repeat pixel SCALE x SCALE times
+                    # Scale pixel SCALE x SCALE
                     for _ in range(SCALE * SCALE):
                         send_byte(high, 1)
                         send_byte(low, 1)
                     bytes_received += 2
+        print("Received:", bytes_received, "bytes")
         return bytes_received == EXPECTED_BYTES
-    except:
+    except Exception as e:
+        print("Stream error:", e)
         return False
 # === Font and text (from your working code) ===
 font = {
@@ -207,13 +213,12 @@ PHOTO_URL = f'http://{server_ip}:9025/image.raw'
 # === Main loop ===
 while True:
     gc.collect()
-    success = stream_and_display_photo()
-    
-    if success:
+    print("Starting fetch cycle...")
+    if stream_and_display():
         draw_text(40, 200, "Hello Preston")
         draw_text(50, 220, "& Willoh!")
         time.sleep(8)
-        stream_and_display_photo()  # Redraw without text
+        stream_and_display()  # Redraw without text
     else:
         set_window(0, 0, 239, 239)
         for _ in range(240 * 240):
