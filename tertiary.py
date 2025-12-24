@@ -33,7 +33,7 @@ time.sleep_ms(50)
 rst.value(1)
 time.sleep_ms(150)
 
-# === GC9A01 Init (exact from your working Hello World) ===
+# === GC9A01 Init (your working sequence) ===
 send_command(0xEF)
 send_command(0xEB, b'\x14')
 send_command(0xFE)
@@ -80,14 +80,14 @@ send_command(0x67, b'\x00\x3C\x00\x00\x00\x01\x54\x10\x32\x98')
 send_command(0x74, b'\x10\x85\x80\x00\x00\x4E\x00')
 send_command(0x98, b'\x3e\x07')
 send_command(0x35)
-send_command(0x21)  # Inversion ON (matches your working Hello World)
+send_command(0x21)  # Inversion ON
 send_command(0x11)
 time.sleep_ms(120)
 send_command(0x29)
 time.sleep_ms(20)
 
-# === FIX: Correct text direction ===
-send_command(0x36, b'\x04')  # MH bit = horizontal mirror → fixes backwards text
+# Fix backwards text
+send_command(0x36, b'\x04')
 
 # === Window & raw display ===
 def set_window(x0, y0, x1, y1):
@@ -95,8 +95,11 @@ def set_window(x0, y0, x1, y1):
     send_command(0x2B, bytes([0, y0, 0, y1]))
     send_command(0x2C)
 
-def display_raw_rgb565(data):
-    set_window(0, 0, 239, 239)
+def display_raw_rgb565(data, size=24):
+    # Center the 24x24 image on 240x240 screen
+    offset_x = (240 - size) // 2
+    offset_y = (240 - size) // 2
+    set_window(offset_x, offset_y, offset_x + size - 1, offset_y + size - 1)
     for i in range(0, len(data), 2):
         send_byte(data[i], 1)
         send_byte(data[i+1], 1)
@@ -159,7 +162,7 @@ def draw_text(x_start, y_start, text):
                         send_byte(0xFF, 1)
             x += 6
 
-# === Initial black screen + loading message (now readable) ===
+# === Initial black screen ===
 set_window(0, 0, 239, 239)
 for _ in range(240 * 240):
     send_byte(0x00, 1)
@@ -171,25 +174,29 @@ draw_text(60, 110, "Loading...")
 try:
     server_ip = open('/server_ip.txt').read().strip()
 except OSError:
-    server_ip = '192.168.1.198'  # Your desktop IP
+    server_ip = '192.168.1.198'
 
 PHOTO_URL = f'http://{server_ip}:9025/image.raw'
 
-# === Main slideshow loop ===
+# === Main loop - debug 24x24 ===
 while True:
     gc.collect()
     success = False
     
     try:
-        print("Fetching:", PHOTO_URL)
+        print("Fetching 24x24 photo...")
         r = urequests.get(PHOTO_URL, timeout=20)
-        if r.status_code == 200 and len(r.content) == 115200:
-            display_raw_rgb565(r.content)
-            draw_text(40, 90, "Hello Preston")
-            draw_text(50, 120, "& Willoh!")
+        if r.status_code == 200 and len(r.content) == 1152:  # 24*24*2 = 1152 bytes
+            display_raw_rgb565(r.content, size=24)
+            draw_text(40, 180, "Photo OK!")
             success = True
             time.sleep(8)
-            display_raw_rgb565(r.content)  # Clear overlay
+            # Clear message
+            set_window(0, 0, 239, 239)
+            for _ in range(240 * 240):
+                send_byte(0x00, 1)
+                send_byte(0x00, 1)
+            display_raw_rgb565(r.content, size=24)
         r.close()
     except Exception as e:
         print("Error:", e)
@@ -202,4 +209,4 @@ while True:
         draw_text(40, 100, "No Photo")
         draw_text(20, 130, "Check Server")
     
-    time.sleep(52)
+    time.sleep(20)  # Faster cycle for debugging
