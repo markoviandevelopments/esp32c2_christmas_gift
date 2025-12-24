@@ -31,30 +31,6 @@ def draw_centered_text(text, y, color=gc9a01.WHITE):
 draw_centered_text("Loading...", 100)
 draw_centered_text("XH-C2X Display", 140)
 
-# === Wait for WiFi with feedback ===
-def wait_for_wifi():
-    sta = network.WLAN(network.STA_IF)
-    if sta.isconnected():
-        tft.fill(gc9a01.BLACK)
-        draw_centered_text("WiFi Connected", 100)
-        time.sleep(2)
-        return True
-    
-    tft.fill(gc9a01.BLACK)
-    draw_centered_text("Connecting WiFi", 100)
-    for _ in range(40):
-        if sta.isconnected():
-            tft.fill(gc9a01.BLACK)
-            draw_centered_text("WiFi OK!", 100)
-            time.sleep(2)
-            return True
-        time.sleep(1)
-    tft.fill(gc9a01.BLACK)
-    draw_centered_text("No WiFi", 100)
-    return False
-
-wait_for_wifi()
-
 # === Server config - photo server on port 9025 ===
 try:
     server_ip = open('/server_ip.txt').read().strip()
