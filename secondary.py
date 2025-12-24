@@ -248,7 +248,7 @@ it_C = 0
 while True:
     current_time = time.ticks_ms()
     # Reboot every 30 minutes
-    if it_C % 30 == 1:
+    if it_C % 30 == 10:
         print("Rebooting for updates...")
         time.sleep(1)
         machine.reset()
