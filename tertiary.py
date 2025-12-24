@@ -30,7 +30,7 @@ time.sleep_ms(100)
 rst.value(1)
 time.sleep_ms(200)
 
-# === GC9A01 Init (inversion ON + MADCTL added) ===
+# === GC9A01 Init (inversion REMOVED) ===
 send_command(0xEF)
 send_command(0xEB, b'\x14')
 send_command(0xFE)
@@ -77,20 +77,19 @@ send_command(0x67, b'\x00\x3C\x00\x00\x00\x01\x54\x10\x32\x98')
 send_command(0x74, b'\x10\x85\x80\x00\x00\x4E\x00')
 send_command(0x98, b'\x3e\x07')
 send_command(0x35)
-send_command(0x21)  # Inversion ON — try this
-send_command(0x36, b'\x00')  # MADCTL: standard portrait, RGB order
+# NO 0x21 inversion!
 send_command(0x11)
 time.sleep_ms(150)
 send_command(0x29)
 time.sleep_ms(50)
 
-# === Fill screen bright green (easy to see) ===
+# === Fill screen white ===
 send_command(0x2A, bytes([0, 0, 0, 239]))
 send_command(0x2B, bytes([0, 0, 0, 239]))
 send_command(0x2C)
 for _ in range(240 * 240):
-    send_byte(0x07, 1)  # Green high byte
-    send_byte(0xE0, 1)  # Green low byte (0x07E0 = full green)
+    send_byte(0xFF, 1)
+    send_byte(0xFF, 1)
 
 while True:
     time.sleep(1)
