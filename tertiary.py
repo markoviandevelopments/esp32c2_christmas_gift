@@ -2,6 +2,8 @@ import time
 import machine
 import urequests
 import gc
+import network
+import os
 
 # === Pins ===
 sck = machine.Pin(8, machine.Pin.OUT)
@@ -24,7 +26,7 @@ def send_command(cmd, data=b''):
     for b in data:
         send_byte(b, 1)
 
-# === Reset & GC9A01 init (same as before) ===
+# === Reset & Init ===
 rst.value(1)
 time.sleep_ms(50)
 rst.value(0)
@@ -32,7 +34,7 @@ time.sleep_ms(50)
 rst.value(1)
 time.sleep_ms(150)
 
-# (Full init sequence – unchanged from your working version)
+# Full GC9A01 init sequence
 send_command(0xEF)
 send_command(0xEB, b'\x14')
 send_command(0xFE)
@@ -79,13 +81,18 @@ send_command(0x67, b'\x00\x3C\x00\x00\x00\x01\x54\x10\x32\x98')
 send_command(0x74, b'\x10\x85\x80\x00\x00\x4E\x00')
 send_command(0x98, b'\x3e\x07')
 send_command(0x35)
-send_command(0x21)  # Remove if colors look bad
+send_command(0x21)  # Remove if colors look washed out
 send_command(0x11)
 time.sleep_ms(120)
 send_command(0x29)
 time.sleep_ms(20)
 
-# === Helper: full-screen window + raw pixel write ===
+# === Window helpers ===
+def set_window(x0, y0, x1, y1):
+    send_command(0x2A, bytes([0, x0, 0, x1]))
+    send_command(0x2B, bytes([0, y0, 0, y1]))
+    send_command(0x2C)
+
 def set_full_window():
     send_command(0x2A, bytes([0, 0, 0, 239]))
     send_command(0x2B, bytes([0, 0, 0, 239]))
@@ -94,10 +101,10 @@ def set_full_window():
 def display_raw_rgb565(data):
     set_full_window()
     for i in range(0, len(data), 2):
-        send_byte(data[i], 1)      # high byte
-        send_byte(data[i+1], 1)    # low byte
+        send_byte(data[i], 1)
+        send_byte(data[i+1], 1)
 
-# === Font and text (same as before) ===
+# === Font ===
 font = {
     ' ': [0x00,0x00,0x00,0x00,0x00],
     '0': [0x7C,0xA2,0x92,0x8A,0x7C],
@@ -113,6 +120,8 @@ font = {
     ':': [0x00,0x36,0x36,0x00,0x00],
     '.': [0x00,0x00,0x00,0x06,0x06],
     '$': [0x24,0x54,0xFE,0x54,0x48],
+    '!': [0x00,0x00,0xFD,0x00,0x00],
+    '-': [0x08,0x08,0x08,0x08,0x08],
     'A': [0x3E,0x48,0x48,0x48,0x3E],
     'B': [0xFE,0x92,0x92,0x92,0x6C],
     'C': [0x7C,0x82,0x82,0x82,0x44],
@@ -155,31 +164,71 @@ def draw_text(x_start, y_start, text):
                         send_byte(0xFF, 1)
             x += 6
 
-def set_window(x0, y0, x1, y1):
-    send_command(0x2A, bytes([0, x0, 0, x1]))
-    send_command(0x2B, bytes([0, y0, 0, y1]))
-    send_command(0x2C)
+# === Clear screen black ===
+set_full_window()
+for _ in range(240 * 240):
+    send_byte(0x00, 1)
+    send_byte(0x00, 1)
 
-# === Main loop ===
-SERVER_IP = open('/server_ip.txt').read().strip() if os.path.exists('/server_ip.txt') else '108.254.1.184'
-PHOTO_URL = f'http://{SERVER_IP}:9025/image.raw'
+# === Show "Loading..." immediately ===
+draw_text(70, 110, "Loading...")
 
+# === Wait for WiFi with feedback ===
+def wait_for_wifi():
+    sta = network.WLAN(network.STA_IF)
+    if sta.isconnected():
+        draw_text(70, 140, "WiFi OK")
+        time.sleep(2)
+        return True
+    draw_text(50, 140, "Connecting.")
+    for i in range(40):
+        if sta.isconnected():
+            draw_text(60, 140, "WiFi OK!")
+            time.sleep(2)
+            return True
+        time.sleep(1)
+        # Animate dots
+        dots = "." * ((i // 5) % 4 + 1)
+        draw_text(110, 140, dots.ljust(4))
+    draw_text(50, 140, "No WiFi  ")
+    return False
+
+wait_for_wifi()
+
+# === Server config - photo port hardcoded to 9025 ===
+try:
+    server_ip = open('/server_ip.txt').read().strip()
+except OSError:
+    server_ip = '108.254.1.184'
+
+PHOTO_URL = f'http://{server_ip}:9025/image.raw'
+
+# === Main slideshow loop ===
 while True:
     gc.collect()
-    print("Fetching new photo...")
+    success = False
     try:
-        r = urequests.get(PHOTO_URL, timeout=15)
-        if r.status_code == 200 and len(r.content) == 240*240*2:  # 115200 bytes
+        print("Fetching photo from:", PHOTO_URL)
+        r = urequests.get(PHOTO_URL, timeout=20)
+        if r.status_code == 200 and len(r.content) == 115200:
             display_raw_rgb565(r.content)
             print("Photo displayed")
-            # Show "Hello World" overlay for 8 seconds
             draw_text(50, 110, "Hello World")
             time.sleep(8)
-            # Clear text (redraw just the photo)
-            display_raw_rgb565(r.content)
+            display_raw_rgb565(r.content)  # Remove text overlay
+            success = True
+        else:
+            print("Bad response:", r.status_code, len(r.content))
         r.close()
     except Exception as e:
-        print("Photo fetch failed:", e)
-        draw_text(20, 100, "No Photo")
-    
-    time.sleep(52)  # Total cycle ≈60 seconds
+        print("Fetch failed:", e)
+
+    if not success:
+        set_full_window()
+        for _ in range(240 * 240):
+            send_byte(0x00, 1)
+            send_byte(0x00, 1)
+        draw_text(40, 100, "No Photo!")
+        draw_text(20, 130, "Check Server/IP")
+
+    time.sleep(52)  # ~60 second cycle
