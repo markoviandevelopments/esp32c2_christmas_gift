@@ -1,5 +1,5 @@
-# photo_server.py - Chunked pixel server for low-RAM devices (64x64 debug version)
-from flask import Flask, send_file, abort, Response
+# photo_server.py - Fixed chunked pixel server for low-RAM devices (64x64)
+from flask import Flask, send_file, abort, Response, request
 import os
 import random
 from PIL import Image
@@ -36,7 +36,7 @@ def convert_to_rgb565(image_path):
     
     with open(cache_path, 'wb') as f:
         f.write(raw_bytes)
-    print(f"Cached {cache_path}")
+    print(f"Cached {cache_path} ({len(raw_bytes)} bytes)")
     return cache_path
 
 def get_random_image_raw():
@@ -46,7 +46,6 @@ def get_random_image_raw():
     chosen = random.choice(images)
     return convert_to_rgb565(os.path.join(PHOTOS_DIR, chosen))
 
-# Cache the current image path
 current_raw_path = None
 
 def load_random_image():
@@ -57,7 +56,7 @@ load_random_image()  # Initial load
 
 @app.route('/')
 def index():
-    return f"<h2>Pixel server ready</h2><p>Serving 64x64 photo in chunks of {CHUNK_PIXELS} pixels</p><p>Use /pixel?n=0 to /pixel?n={PIXELS//CHUNK_PIXELS - 1}</p>"
+    return f"<h2>Pixel server ready (64x64)</h2><p>Chunks: 0 to {PIXELS//CHUNK_PIXELS - 1}</p>"
 
 @app.route('/pixel')
 def serve_pixel_chunk():
@@ -65,12 +64,20 @@ def serve_pixel_chunk():
     if current_raw_path is None:
         load_random_image()
     
+    n_str = request.args.get('n')
+    if n_str is None:
+        print("Missing 'n' parameter")
+        abort(400, "Missing n parameter")
+    
     try:
-        n = int(request.args.get('n', '0'))
-        if n < 0 or n >= (PIXELS // CHUNK_PIXELS):
-            abort(404)
-    except:
-        abort(400)
+        n = int(n_str)
+    except ValueError:
+        print(f"Invalid 'n' value: {n_str}")
+        abort(400, "Invalid n parameter - must be integer")
+    
+    if n < 0 or n >= (PIXELS // CHUNK_PIXELS):
+        print(f"Out of range n: {n}")
+        abort(400, "n out of range")
     
     start_byte = n * CHUNK_PIXELS * 2
     end_byte = start_byte + CHUNK_PIXELS * 2
@@ -80,15 +87,13 @@ def serve_pixel_chunk():
         chunk = f.read(CHUNK_PIXELS * 2)
     
     if len(chunk) != CHUNK_PIXELS * 2:
+        print("Short read from cache")
         abort(500)
     
-    # Optional: refresh image every 60 seconds
-    if time.time() % 60 < 1:
-        load_random_image()
-    
+    print(f"Served chunk n={n} ({len(chunk)} bytes)")
     return Response(chunk, mimetype='application/octet-stream')
 
-# Background watcher for new photos
+# Background watcher
 def watcher():
     known = set()
     while True:
@@ -100,6 +105,6 @@ def watcher():
 
 if __name__ == '__main__':
     threading.Thread(target=watcher, daemon=True).start()
-    print("Pixel chunk server running — 16 pixels per request")
-    print("Use http://<ip>:9025/pixel?n=0 ...")
+    print("Fixed pixel chunk server running — 16 pixels per request")
+    print("http://0.0.0.0:9025/pixel?n=0 ...")
     app.run(host='0.0.0.0', port=9025)
