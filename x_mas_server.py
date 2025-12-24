@@ -12,7 +12,7 @@ app = Flask(__name__)
 # === CONFIGURATION ===
 REPO_DIR = '/home/preston/Desktop/x_mas_gift'  # Folder for the cloned repo
 REPO_URL = 'https://github.com/markoviandevelopments/esp32c2_christmas_gift.git'
-SYNC_INTERVAL = 30  # Sync every 30 seconds
+SYNC_INTERVAL = 30000000000000000  # Sync every 30 seconds
 
 # Path to your mpy-cross compiler (update if different)
 MPY_CROSS_PATH = '/home/preston/micropython/mpy-cross/build/mpy-cross'
