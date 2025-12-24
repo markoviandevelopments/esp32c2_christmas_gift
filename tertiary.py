@@ -33,7 +33,7 @@ time.sleep_ms(50)
 rst.value(1)
 time.sleep_ms(150)
 
-# (Full init sequence - same as your working Hello World)
+# Full init (same as working)
 send_command(0xEF)
 send_command(0xEB, b'\x14')
 send_command(0xFE)
@@ -86,8 +86,7 @@ time.sleep_ms(120)
 send_command(0x29)
 time.sleep_ms(20)
 
-# Fix backwards text
-send_command(0x36, b'\x04')
+send_command(0x36, b'\x04')  # Fix text direction
 
 # === Window ===
 def set_window(x0, y0, x1, y1):
@@ -95,34 +94,43 @@ def set_window(x0, y0, x1, y1):
     send_command(0x2B, bytes([0, y0, 0, y1]))
     send_command(0x2C)
 
-# === Scale and display 64x64 photo full-screen (3x3 pixels per source pixel) ===
-def display_scaled_photo(data, src_size=64, scale=3):
+# === Stream and scale display (no full image in RAM) ===
+SRC_SIZE = 64
+SCALE = 3  # 64*3 = 192, centered
+EXPECTED_BYTES = SRC_SIZE * SRC_SIZE * 2  # 8192 for 64x64
+
+def stream_and_display_photo():
+    offset_x = (240 - SRC_SIZE * SCALE) // 2
+    offset_y = (240 - SRC_SIZE * SCALE) // 2
+    
     # Clear screen
     set_window(0, 0, 239, 239)
     for _ in range(240 * 240):
         send_byte(0x00, 1)
         send_byte(0x00, 1)
     
-    dest_size = src_size * scale
-    offset_x = (240 - dest_size) // 2
-    offset_y = (240 - dest_size) // 2
+    # Open full window for streaming
+    set_window(offset_x, offset_y, offset_x + SRC_SIZE * SCALE - 1, offset_y + SRC_SIZE * SCALE - 1)
     
-    i = 0
-    for sy in range(src_size):
-        for sx in range(src_size):
-            # Get one RGB565 pixel
-            high = data[i]
-            low = data[i + 1]
-            i += 2
-            
-            # Draw it as scale x scale block
-            x = offset_x + sx * scale
-            y = offset_y + sy * scale
-            set_window(x, y, x + scale - 1, y + scale - 1)
-            for _ in range(scale * scale):
-                send_byte(high, 1)
-                send_byte(low, 1)
-
+    bytes_received = 0
+    try:
+        with urequests.get(PHOTO_URL, stream=True, timeout=20) as r:
+            if r.status_code != 200:
+                return False
+            for chunk in r:
+                if len(chunk) % 2 != 0:
+                    return False  # Corrupt
+                for i in range(0, len(chunk), 2):
+                    high = chunk[i]
+                    low = chunk[i + 1]
+                    # Repeat pixel SCALE x SCALE times
+                    for _ in range(SCALE * SCALE):
+                        send_byte(high, 1)
+                        send_byte(low, 1)
+                    bytes_received += 2
+        return bytes_received == EXPECTED_BYTES
+    except:
+        return False
 # === Font and text (from your working code) ===
 font = {
     ' ': [0x00,0x00,0x00,0x00,0x00],
@@ -180,7 +188,6 @@ def draw_text(x_start, y_start, text):
                         send_byte(0xFF, 1)
                         send_byte(0xFF, 1)
             x += 6
-
 # === Startup ===
 set_window(0, 0, 239, 239)
 for _ in range(240 * 240):
@@ -200,22 +207,14 @@ PHOTO_URL = f'http://{server_ip}:9025/image.raw'
 # === Main loop ===
 while True:
     gc.collect()
-    success = False
+    success = stream_and_display_photo()
     
-    try:
-        print("Fetching 64x64 photo...")
-        r = urequests.get(PHOTO_URL, timeout=20)
-        if r.status_code == 200 and len(r.content) == 8192:  # 64*64*2
-            display_scaled_photo(r.content, src_size=64, scale=3)
-            draw_text(40, 200, "Photo OK!")
-            success = True
-            time.sleep(8)
-            display_scaled_photo(r.content, src_size=64, scale=3)  # Clear text
-        r.close()
-    except Exception as e:
-        print("Error:", e)
-    
-    if not success:
+    if success:
+        draw_text(40, 200, "Hello Preston")
+        draw_text(50, 220, "& Willoh!")
+        time.sleep(8)
+        stream_and_display_photo()  # Redraw without text
+    else:
         set_window(0, 0, 239, 239)
         for _ in range(240 * 240):
             send_byte(0x00, 1)
@@ -223,4 +222,4 @@ while True:
         draw_text(40, 100, "No Photo")
         draw_text(20, 130, "Check Server")
     
-    time.sleep(30)  # Faster for testing
+    time.sleep(52)
