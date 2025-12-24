@@ -112,7 +112,7 @@ async def connect_wifi(ssid, password):
     print('WiFi failed')
     return False
 
-async def download_secondary():
+async def download_tertiary():
     url = f'http://{provisioned_server_ip}:{provisioned_server_port}/tertiary.mpy'
     print(f'Downloading from {url}')
     print('Free memory before download:', gc.mem_free())
@@ -130,12 +130,12 @@ async def download_secondary():
     print('Download failed')
     return False
 
-async def run_secondary():
-    if await download_secondary():
+async def run_tertiary():
+    if await download_tertiary():
         gc.collect()
         print('Free memory before import:', gc.mem_free())
         try:
-            import secondary
+            import tertiary
             print('tertiary.mpy running')
         except Exception as e:
             print('Import failed:', e)
@@ -168,8 +168,8 @@ async def advertise_and_provision():
                 print('Full credentials received! Proceeding to WiFi...')
                 ble.gap_advertise(None)  # Stop advertising immediately
                 if await connect_wifi(provisioned_ssid, provisioned_pass):
-                    await run_secondary()
-                return  # Exit loop - secondary takes over forever
+                    await run_tertiary()
+                return  # Exit loop - tertiary takes over forever
             await asyncio.sleep_ms(100)
 
         print('Timeout - no full credentials')
@@ -199,7 +199,7 @@ async def main():
     if provisioned_ssid and provisioned_pass:
         print('Saved credentials found - connecting directly')
         if await connect_wifi(provisioned_ssid, provisioned_pass):
-            await run_secondary()
+            await run_tertiary()
             return
 
     await advertise_and_provision()
