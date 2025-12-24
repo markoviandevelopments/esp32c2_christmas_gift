@@ -209,8 +209,9 @@ draw_text(60, 110, "Loading...")
 while True:
     gc.collect()
     if update_photo():
-        draw_text(40, 200, "Hello Preston")
-        draw_text(50, 220, "& Willoh!")
+        draw_text(30, 200, "Happy Birthday!!!")
+        draw_text(40, 220, "Mom")
+        draw_text(50, 220, "-Preston & Willoh")
         time.sleep(8)
     else:
         draw_text(40, 100, "No Photo")
