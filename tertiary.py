@@ -33,7 +33,7 @@ time.sleep_ms(50)
 rst.value(1)
 time.sleep_ms(150)
 
-# === GC9A01 Init (exact sequence from your working "Hello World" code) ===
+# === GC9A01 Init (exact from your working Hello World) ===
 send_command(0xEF)
 send_command(0xEB, b'\x14')
 send_command(0xFE)
@@ -80,11 +80,14 @@ send_command(0x67, b'\x00\x3C\x00\x00\x00\x01\x54\x10\x32\x98')
 send_command(0x74, b'\x10\x85\x80\x00\x00\x4E\x00')
 send_command(0x98, b'\x3e\x07')
 send_command(0x35)
-send_command(0x21)  # Inversion ON - matches your working code
+send_command(0x21)  # Inversion ON (matches your working Hello World)
 send_command(0x11)
 time.sleep_ms(120)
 send_command(0x29)
 time.sleep_ms(20)
+
+# === FIX: Correct text direction ===
+send_command(0x36, b'\x04')  # MH bit = horizontal mirror → fixes backwards text
 
 # === Window & raw display ===
 def set_window(x0, y0, x1, y1):
@@ -95,10 +98,10 @@ def set_window(x0, y0, x1, y1):
 def display_raw_rgb565(data):
     set_window(0, 0, 239, 239)
     for i in range(0, len(data), 2):
-        send_byte(data[i], 1)      # high byte
-        send_byte(data[i+1], 1)    # low byte
+        send_byte(data[i], 1)
+        send_byte(data[i+1], 1)
 
-# === Font and text (exact from your working code) ===
+# === Font and text (from your working code) ===
 font = {
     ' ': [0x00,0x00,0x00,0x00,0x00],
     '0': [0x7C,0xA2,0x92,0x8A,0x7C],
@@ -156,42 +159,40 @@ def draw_text(x_start, y_start, text):
                         send_byte(0xFF, 1)
             x += 6
 
-# === Fill black at startup ===
+# === Initial black screen + loading message (now readable) ===
 set_window(0, 0, 239, 239)
 for _ in range(240 * 240):
     send_byte(0x00, 1)
     send_byte(0x00, 1)
 
-draw_text(50, 110, "Loading...")
+draw_text(60, 110, "Loading...")
 
-# === Server config - photo server on port 9025 ===
+# === Server config ===
 try:
     server_ip = open('/server_ip.txt').read().strip()
 except OSError:
-    server_ip = '192.168.1.198'  # Change if your desktop IP is different
+    server_ip = '192.168.1.198'  # Your desktop IP
 
 PHOTO_URL = f'http://{server_ip}:9025/image.raw'
 
-# === Main photo slideshow loop ===
+# === Main slideshow loop ===
 while True:
     gc.collect()
     success = False
     
     try:
-        print("Fetching photo from:", PHOTO_URL)
+        print("Fetching:", PHOTO_URL)
         r = urequests.get(PHOTO_URL, timeout=20)
-        
         if r.status_code == 200 and len(r.content) == 115200:
             display_raw_rgb565(r.content)
             draw_text(40, 90, "Hello Preston")
             draw_text(50, 120, "& Willoh!")
             success = True
             time.sleep(8)
-            display_raw_rgb565(r.content)  # Remove text overlay
+            display_raw_rgb565(r.content)  # Clear overlay
         r.close()
-        
     except Exception as e:
-        print("Fetch failed:", e)
+        print("Error:", e)
     
     if not success:
         set_window(0, 0, 239, 239)
@@ -201,4 +202,4 @@ while True:
         draw_text(40, 100, "No Photo")
         draw_text(20, 130, "Check Server")
     
-    time.sleep(52)  # ~60 second cycle
+    time.sleep(52)
