@@ -140,8 +140,8 @@ def draw_coin_logo(x, y):
             cached_logo_pixels = [] # Failed
     if cached_logo_pixels and len(cached_logo_pixels) == 400:
         idx = 0
-        for py in range(24):
-            for px in range(24):
+        for py in range(20):
+            for px in range(20):
                 color = cached_logo_pixels[idx]
                 idx += 1
                 set_window(x + px, y + py, x + px, y + py)
