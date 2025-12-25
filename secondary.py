@@ -58,7 +58,7 @@ time.sleep_ms(100)
 # === Window ===
 def set_window(x0, y0, x1, y1):
     send_command(0x2A, bytes([0, x0, 0, x1]))
-    send_command(0x2B, bytes([0, y0 + 24, 0, y1 + 24]))
+    send_command(0x2B, bytes([0, y0 + 26, 0, y1 + 26]))
     send_command(0x2C)
 # === Fill black ===
 set_window(0, 0, 159, 79)
