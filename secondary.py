@@ -58,7 +58,7 @@ time.sleep_ms(100)
 # === Window ===
 def set_window(x0, y0, x1, y1):
     send_command(0x2A, bytes([0, x0, 0, x1]))
-    send_command(0x2B, bytes([0, y0 + 26, 0, y1 + 26]))
+    send_command(0x2B, bytes([0, y0 + 24, 0, y1 + 24]))
     send_command(0x2C)
 # === Fill black ===
 set_window(0, 0, 159, 79)
@@ -274,7 +274,7 @@ while True:
     draw_text(10, 22, f"{coin}: " + last_price)
     draw_text(10, 36, "VAL: " + last_value)
     draw_text(10, 50, "TIME: " + last_time + " CT")
-    draw_coin_logo(120, 30)
+    draw_coin_logo(120, 32)
     # Accurate 60-second delay with idle (WiFi-friendly)
     current_time = time.ticks_ms()
     it_C += 1
