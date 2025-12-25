@@ -138,10 +138,10 @@ def draw_coin_logo(x, y):
             r.close()
         except:
             cached_logo_pixels = [] # Failed
-    if cached_logo_pixels and len(cached_logo_pixels) == 1024:
+    if cached_logo_pixels and len(cached_logo_pixels) == 576:
         idx = 0
-        for py in range(32):
-            for px in range(32):
+        for py in range(24):
+            for px in range(24):
                 color = cached_logo_pixels[idx]
                 idx += 1
                 set_window(x + px, y + py, x + px, y + py)
@@ -274,7 +274,7 @@ while True:
     draw_text(10, 22, f"{coin}: " + last_price)
     draw_text(10, 36, "VAL: " + last_value)
     draw_text(10, 50, "TIME: " + last_time + " CT")
-    draw_coin_logo(120, 32)
+    draw_coin_logo(120, 30)
     # Accurate 60-second delay with idle (WiFi-friendly)
     current_time = time.ticks_ms()
     it_C += 1
