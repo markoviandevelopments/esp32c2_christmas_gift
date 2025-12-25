@@ -195,11 +195,11 @@ mac_bytes = machine.unique_id()
 mac_str = ':'.join(['{:02X}'.format(b) for b in mac_bytes]).upper()
 # === Check which device ===
 device_config = {
-    '34:98:7A:07:13:B4': {'coin': 'XRP', 'amount': 1.042248, 'endpoint': 'xrp'},
-    '34:98:7A:07:14:D0': {'coin': 'SOL', 'amount': 0.025033, 'endpoint': 'sol'},
-    '34:98:7A:06:FC:A0': {'coin': 'DOGE', 'amount': 16.93723136, 'endpoint': 'doge'},
-    '34:98:7A:06:FB:D0': {'coin': 'PEPE', 'amount': 499345.44795525, 'endpoint': 'pepe'},
-    '34:98:7A:07:11:24': {'coin': 'LTC', 'amount': 0.02589512, 'endpoint': 'ltc'},
+    '34:98:7A:07:13:B4': {'coin': 'XRP', 'amount': 2.76412, 'endpoint': 'xrp'},
+    '34:98:7A:07:14:D0': {'coin': 'SOL', 'amount': 0.042486, 'endpoint': 'sol'},
+    '34:98:7A:06:FC:A0': {'coin': 'DOGE', 'amount': 40.7874, 'endpoint': 'doge'},
+    '34:98:7A:06:FB:D0': {'coin': 'PEPE', 'amount': 1291895, 'endpoint': 'pepe'},
+    '34:98:7A:07:11:24': {'coin': 'LTC', 'amount': 0.067632, 'endpoint': 'ltc'},
 }
 config = device_config.get(mac_str, {'coin': 'BTC', 'amount': 0.0000566, 'endpoint': 'btc'})
 coin = config['coin']
