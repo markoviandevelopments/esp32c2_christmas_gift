@@ -58,7 +58,7 @@ time.sleep_ms(100)
 # === Window ===
 def set_window(x0, y0, x1, y1):
     send_command(0x2A, bytes([0, x0, 0, x1]))
-    send_command(0x2B, bytes([0, y0 + 24, 0, y1 + 24]))
+    send_command(0x2B, bytes([0, y0 + 32, 0, y1 + 32]))
     send_command(0x2C)
 # === Fill black ===
 set_window(0, 0, 159, 79)
@@ -81,6 +81,7 @@ font = {
     ':': [0x00,0x36,0x36,0x00,0x00],
     '.': [0x00,0x00,0x00,0x06,0x06],
     '$': [0x24,0x54,0xFE,0x54,0x48],
+    "'": [0x20,0x60,0x40,0x00,0x00],
     'A': [0x3E,0x48,0x48,0x48,0x3E],
     'B': [0xFE,0x92,0x92,0x92,0x6C],
     'C': [0x7C,0x82,0x82,0x82,0x44],
@@ -137,10 +138,10 @@ def draw_coin_logo(x, y):
             r.close()
         except:
             cached_logo_pixels = [] # Failed
-    if cached_logo_pixels and len(cached_logo_pixels) == 576:
+    if cached_logo_pixels and len(cached_logo_pixels) == 1024:
         idx = 0
-        for py in range(24):
-            for px in range(24):
+        for py in range(32):
+            for px in range(32):
                 color = cached_logo_pixels[idx]
                 idx += 1
                 set_window(x + px, y + py, x + px, y + py)
@@ -220,7 +221,7 @@ last_value = "---"
 last_time = "--:--:--"
 
 name_for_mac = {
-    '34:98:7A:07:13:B4': "Sydney's",   # Example: this one gets Willoh's name
+    '34:98:7A:07:13:B4': "Sydney's",
     '34:98:7A:07:14:D0': "Alyssa's",
     '34:98:7A:06:FC:A0': "Patrick's",
     '34:98:7A:06:FB:D0': "Braden's",
@@ -273,7 +274,7 @@ while True:
     draw_text(10, 22, f"{coin}: " + last_price)
     draw_text(10, 36, "VAL: " + last_value)
     draw_text(10, 50, "TIME: " + last_time + " CT")
-    draw_coin_logo(120, 30)
+    draw_coin_logo(120, 25)
     # Accurate 60-second delay with idle (WiFi-friendly)
     current_time = time.ticks_ms()
     it_C += 1
