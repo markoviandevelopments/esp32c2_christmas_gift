@@ -18,7 +18,7 @@ from math import sqrt
 #04 = (MADCTL_MH)
 
 #60 = 90 right rotation
-#C0 = 180 right rotation
+#C0 = 180 right rotationProvisioning wifi for XH-C2X mods using bluetooth ios_app_development 1765890391
 #A0 = 270 right rotation
 TFTRotations = [0x00, 0x60, 0xC0, 0xA0]
 TFTBGR = 0x08 # for 1.8 and 1.44 inch display

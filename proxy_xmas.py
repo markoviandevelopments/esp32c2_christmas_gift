@@ -47,10 +47,10 @@ def load_or_download_logo(coin, url):
             print(f"Failed to download {coin} logo: {e}")
             return "error"
     try:
-        img = img.resize((20, 20), Image.LANCZOS)
+        img = img.resize((24, 24), Image.LANCZOS)
         pixels = []
-        for y in range(20):
-            for x in range(20):
+        for y in range(24):
+            for x in range(24):
                 r, g, b = img.getpixel((x, y))
                 pixels.append(f"0x{rgb565(r,g,b):04X}")
         return ','.join(pixels)

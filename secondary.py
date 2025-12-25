@@ -57,7 +57,7 @@ send_command(0x29)
 time.sleep_ms(100)
 # === Window ===
 def set_window(x0, y0, x1, y1):
-    send_command(0x2A, bytes([0, x0 + 4, 0, x1 + 4]))
+    send_command(0x2A, bytes([0, x0, 0, x1]))
     send_command(0x2B, bytes([0, y0 + 24, 0, y1 + 24]))
     send_command(0x2C)
 # === Fill black ===
@@ -137,10 +137,10 @@ def draw_coin_logo(x, y):
             r.close()
         except:
             cached_logo_pixels = [] # Failed
-    if cached_logo_pixels and len(cached_logo_pixels) == 400: # 20x20
+    if cached_logo_pixels and len(cached_logo_pixels) == 576:
         idx = 0
-        for py in range(20):
-            for px in range(20):
+        for py in range(24):
+            for px in range(24):
                 color = cached_logo_pixels[idx]
                 idx += 1
                 set_window(x + px, y + py, x + px, y + py)
@@ -219,6 +219,14 @@ last_price = "---"
 last_value = "---"
 last_time = "--:--:--"
 
+name_for_mac = {
+    '34:98:7A:07:13:B4': "Sydney's",   # Example: this one gets Willoh's name
+    '34:98:7A:07:14:D0': "Alyssa's",
+    '34:98:7A:06:FC:A0': "Patrick's",
+    '34:98:7A:06:FB:D0': "Braden's",
+    '34:98:7A:07:11:24': "Pattie's",
+}
+display_name = name_for_mac.get(mac_str, "Preston's")
 
 def fetch_info():
     global last_price, last_value, last_time
@@ -261,7 +269,7 @@ while True:
     for _ in range(160 * 80):
         send_byte(0x00, 1)
         send_byte(0x00, 1)
-    draw_text(10, 8, "MAC: " + mac_str)
+    draw_text(10, 8, display_name + " " + coin)
     draw_text(10, 22, f"{coin}: " + last_price)
     draw_text(10, 36, "VAL: " + last_value)
     draw_text(10, 50, "TIME: " + last_time + " CT")
