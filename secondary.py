@@ -47,7 +47,7 @@ send_command(0xC2, bytes([0x0A, 0x00]))
 send_command(0xC3, bytes([0x8A, 0x2A]))
 send_command(0xC4, bytes([0x8A, 0xEE]))
 send_command(0xC5, bytes([0x0E]))
-send_command(0x21) # INVON
+send_command(0x20) # INVOFF
 send_command(0x36, bytes([0x60])) # MADCTL for rotation
 send_command(0xE0, bytes([0x02,0x1C,0x07,0x12,0x37,0x32,0x29,0x2D,0x29,0x25,0x2B,0x39,0x00,0x01,0x03,0x10]))
 send_command(0xE1, bytes([0x03,0x1D,0x07,0x06,0x2E,0x2C,0x29,0x2D,0x2E,0x2E,0x37,0x3F,0x00,0x00,0x02,0x10]))
@@ -195,13 +195,13 @@ mac_bytes = machine.unique_id()
 mac_str = ':'.join(['{:02X}'.format(b) for b in mac_bytes]).upper()
 # === Check which device ===
 device_config = {
-    '34:98:7A:07:14:D0': {'coin': 'BTC', 'amount': 0.0000566, 'endpoint': 'btc'},
-    '34:98:7A:07:13:B4': {'coin': 'SOL', 'amount': 0.025033, 'endpoint': 'sol'},
+    '34:98:7A:07:13:B4': {'coin': 'XRP', 'amount': 1.042248, 'endpoint': 'xrp'},
+    '34:98:7A:07:14:D0': {'coin': 'SOL', 'amount': 0.025033, 'endpoint': 'sol'},
     '34:98:7A:06:FC:A0': {'coin': 'DOGE', 'amount': 16.93723136, 'endpoint': 'doge'},
     '34:98:7A:06:FB:D0': {'coin': 'PEPE', 'amount': 499345.44795525, 'endpoint': 'pepe'},
     '34:98:7A:07:11:24': {'coin': 'LTC', 'amount': 0.02589512, 'endpoint': 'ltc'},
 }
-config = device_config.get(mac_str, {'coin': 'XRP', 'amount': 1.042248, 'endpoint': 'xrp'})
+config = device_config.get(mac_str, {'coin': 'BTC', 'amount': 0.0000566, 'endpoint': 'btc'})
 coin = config['coin']
 amount = config['amount']
 coin_endpoint = config['endpoint']
