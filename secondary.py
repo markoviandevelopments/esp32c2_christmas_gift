@@ -138,7 +138,7 @@ def draw_coin_logo(x, y):
             r.close()
         except:
             cached_logo_pixels = [] # Failed
-    if cached_logo_pixels and len(cached_logo_pixels) == 576:
+    if cached_logo_pixels and len(cached_logo_pixels) == 400:
         idx = 0
         for py in range(24):
             for px in range(24):
