@@ -283,7 +283,13 @@ def fetch_info():
         time_text = r.text.strip()
         r.close()
         if time_text != "error" and len(time_text) == 8:
-            last_time = time_text[:5]  # ← Only HH:MM
+            hh_mm = time_text[:5]
+            hh = int(hh_mm[:2])
+            mm = hh_mm[3:]
+            
+            new_hh = (hh + 1) % 24
+            
+            last_time = f"{new_hh:02d}:{mm}"
     except:
         pass
 
@@ -309,7 +315,7 @@ while True:
     draw_text(8, 22, f"{coin}:" + last_price)
     draw_text(8, 42, f"VAL:${last_value:.2f}")
     draw_text(8, 62, "TIME:" + last_time)
-    draw_coin_logo(130, 30)
+    draw_coin_logo(130, 35)
     # Accurate 60-second delay with idle (WiFi-friendly)
     current_time = time.ticks_ms()
     it_C += 1
