@@ -113,24 +113,44 @@ font = {
 def draw_text(x_start, y_start, text):
     x = x_start
     for char in text.upper():
-        if char in font:
-            bitmap = font[char]
+        if char not in font:
+            x += 12
+            continue
+        bitmap = font[char]
+        for row in range(8):
+            y0 = y_start + row * 2
+            y1 = y0 + 1
+            # Build list of x positions that need pixels this row
+            active_cols = []
             for col in range(5):
-                bits = bitmap[col]
-                for row in range(8):
-                    if bits & (1 << (7 - row)):
-                        # Draw 2x2 block instead of 1x1
-                        set_window(x + col*2, y_start + row*2, x + col*2 + 1, y_start + row*2 + 1)
-                        # Send the same pixel 4 times (2x2)
-                        send_byte(0xFF, 1)
-                        send_byte(0xFF, 1)
-                        send_byte(0xFF, 1)
-                        send_byte(0xFF, 1)
-                        send_byte(0xFF, 1)
-                        send_byte(0xFF, 1)
-                        send_byte(0xFF, 1)
-                        send_byte(0xFF, 1)
-        x += 12  # 6 columns × 2 = 12 pixels per character
+                if bitmap[col] & (1 << (7 - row)):
+                    active_cols.append(col)
+            if not active_cols:
+                continue
+            # Find contiguous runs to minimize window sets
+            start_col = active_cols[0]
+            prev_col = active_cols[0]
+            for col in active_cols[1:]:
+                if col != prev_col + 1:
+                    # End current run
+                    draw_scaled_hline(x + start_col*2, y0, x + prev_col*2 + 1, y1)
+                    start_col = col
+                prev_col = col
+            # Last run
+            draw_scaled_hline(x + start_col*2, y0, x + prev_col*2 + 1, y1)
+        x += 12
+
+def draw_scaled_hline(x0, y0, x1, y1):
+    if x0 > x1:
+        return
+    set_window(x0, y0, x1, y0)
+    for _ in range(x1 - x0 + 1):
+        send_byte(0xFF, 1)
+        send_byte(0xFF, 1)
+    set_window(x0, y1, x1, y1)
+    for _ in range(x1 - x0 + 1):
+        send_byte(0xFF, 1)
+        send_byte(0xFF, 1)
         
 # === Coin logo cache ===
 cached_logo_pixels = None
@@ -248,7 +268,7 @@ def fetch_info():
             price = float(price_text)
             last_price = f"${price}"
             value = price * amount
-            last_value = f"${value:.8f}" if coin == 'BTC' else f"${value:.2f}" if coin in ['SOL', 'LTC'] else f"${value:.6f}" if coin == 'DOGE' else f"${value}"
+            last_value = value
     except:
         pass
     try:
@@ -266,7 +286,7 @@ it_C = 0
 while True:
     current_time = time.ticks_ms()
     # Reboot every 30 minutes
-    if it_C % 30 == 10:
+    if it_C > 0 and it_C % 30 == 0:
         print("Rebooting for updates...")
         time.sleep(1)
         machine.reset()
@@ -281,7 +301,7 @@ while True:
         send_byte(0x00, 1)
     draw_text(8, 4, display_name + " " + coin)
     draw_text(8, 20, f"{coin}: " + last_price)
-    draw_text(8, 36, "VAL: " + str(round(last_value, 2)))
+    draw_text(8, 36, f"VAL: ${last_value:.2f}")
     draw_text(8, 52, "TIME: " + last_time + " CT")
     draw_coin_logo(120, 25)
     # Accurate 60-second delay with idle (WiFi-friendly)
