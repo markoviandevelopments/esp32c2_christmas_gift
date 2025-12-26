@@ -227,7 +227,7 @@ name_for_mac = {
     '34:98:7A:06:FB:D0': "Braden's",
     '34:98:7A:07:11:24': "Pattie's",
 }
-display_name = name_for_mac.get(mac_str, "Preston's")
+display_name = name_for_mac.get(mac_str, "Chris's")
 
 def fetch_info():
     global last_price, last_value, last_time
