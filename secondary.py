@@ -266,11 +266,18 @@ def fetch_info():
         r.close()
         if price_text != "error":
             price = float(price_text)
-            last_price = f"${price}"
+            # Round to nearest dollar ONLY for Bitcoin
+            if coin == 'BTC':
+                displayed_price = round(price)  # e.g., 64987.32 → 65000
+                last_price = f"${displayed_price}"
+            else:
+                last_price = f"${price}"  # Full precision for others
+            
             value = price * amount
-            last_value = value
+            last_value = value  # Still use exact value for VAL calculation
     except:
-        pass
+        pass  # Keep old values on failure
+    
     try:
         r = urequests.get(f'{data_proxy_url}/time', timeout=10)
         time_text = r.text.strip()
@@ -300,10 +307,10 @@ while True:
         send_byte(0x00, 1)
         send_byte(0x00, 1)
     draw_text(8, 4, display_name + " " + coin)
-    draw_text(8, 20, f"{coin}:" + last_price)
-    draw_text(8, 36, f"VAL:${last_value:.2f}")
-    draw_text(8, 52, "TIME:" + last_time)
-    draw_coin_logo(120, 10)
+    draw_text(8, 22, f"{coin}:" + last_price)
+    draw_text(8, 42, f"VAL:${last_value:.2f}")
+    draw_text(8, 62, "TIME:" + last_time)
+    draw_coin_logo(130, 0)
     # Accurate 60-second delay with idle (WiFi-friendly)
     current_time = time.ticks_ms()
     it_C += 1
