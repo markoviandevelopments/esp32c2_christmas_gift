@@ -119,10 +119,19 @@ def draw_text(x_start, y_start, text):
                 bits = bitmap[col]
                 for row in range(8):
                     if bits & (1 << (7 - row)):
-                        set_window(x + col, y_start + row, x + col, y_start + row)
+                        # Draw 2x2 block instead of 1x1
+                        set_window(x + col*2, y_start + row*2, x + col*2 + 1, y_start + row*2 + 1)
+                        # Send the same pixel 4 times (2x2)
                         send_byte(0xFF, 1)
                         send_byte(0xFF, 1)
-        x += 6
+                        send_byte(0xFF, 1)
+                        send_byte(0xFF, 1)
+                        send_byte(0xFF, 1)
+                        send_byte(0xFF, 1)
+                        send_byte(0xFF, 1)
+                        send_byte(0xFF, 1)
+        x += 12  # 6 columns × 2 = 12 pixels per character
+        
 # === Coin logo cache ===
 cached_logo_pixels = None
 # === Draw coin logo from cached RGB565 array (20x20) ===
@@ -270,11 +279,11 @@ while True:
     for _ in range(160 * 80):
         send_byte(0x00, 1)
         send_byte(0x00, 1)
-    draw_text(10, 8, display_name + " " + coin)
-    draw_text(10, 22, f"{coin}: " + last_price)
-    draw_text(10, 36, "VAL: " + last_value)
-    draw_text(10, 50, "TIME: " + last_time + " CT")
-    draw_coin_logo(120, 30)
+    draw_text(8, 4, display_name + " " + coin)
+    draw_text(8, 20, f"{coin}: " + last_price)
+    draw_text(8, 36, "VAL: " + str(round(last_value, 2)))
+    draw_text(8, 52, "TIME: " + last_time + " CT")
+    draw_coin_logo(120, 25)
     # Accurate 60-second delay with idle (WiFi-friendly)
     current_time = time.ticks_ms()
     it_C += 1
