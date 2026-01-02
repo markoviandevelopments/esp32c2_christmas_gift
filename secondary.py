@@ -5,6 +5,7 @@ import network
 import gc
 import ujson
 import usocket
+import random
 # === Print free memory before anything else ===
 print("Free memory at secondary start:", gc.mem_free())
 # === Pins ===
@@ -379,8 +380,7 @@ def fetch_data():
         r.close()
         current_rank = rank_json.get(mac_str, 99)
     except Exception as e:
-        print("Rank fetch error:", e)  # Optional debug
-        current_rank = 99
+        pass
 
 
 # Ping server with MAC once
@@ -413,7 +413,15 @@ while True:
     draw_text(8, 4, display_name + " " + coin)
     draw_text(8, 22, f"{coin}:" + last_price)
     draw_text(8, 42, f"VAL:${last_value:.2f}")
-    draw_text(8, 62, "HOWDY Y'ALL")
+    string = "HOWDY"
+    r1 = random.randint(1,3)
+    if r1 == 1:
+        string = "HOWDY"
+    elif r1 == 2:
+        string = "YO"
+    elif r1 == 3:
+        string = "BRUV"
+    draw_text(8, 62, string)
     draw_coin_logo(130, 35)
     
     if current_rank < 99:
