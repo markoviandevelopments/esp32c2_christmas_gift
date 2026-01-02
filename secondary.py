@@ -21,7 +21,6 @@ def send_byte(byte, is_data):
         byte <<= 1
         sck.value(1)
     sck.value(0)
-
 def send_command(cmd, data=b''):
     send_byte(cmd, 0)
     for b in data:
@@ -142,48 +141,6 @@ def draw_text(x_start, y_start, text):
             draw_scaled_hline(x + start_col*2, y0, x + prev_col*2 + 1, y1)
         x += 12
 
-# === Draw colored pixel (for rank number) ===
-def draw_pixel(x, y, color565):
-    if 0 <= x < 160 and 0 <= y < 80:
-        set_window(x, y, x, y)
-        send_byte(color565 >> 8, 1)
-        send_byte(color565 & 0xFF, 1)
-
-# === Draw large rank number in bottom right ===
-def draw_rank(rank_str, rank_num):
-    # Colors in RGB565
-    colors = {
-        1: 0xFFE0,  # Gold
-        2: 0xC618,  # Silver
-        3: 0xCD72,  # Bronze
-    }
-    color = colors.get(rank_num, 0xFFFF)  # White for 4+
-    
-    x_base = 130
-    y_base = 60
-    # Simple 10x14 bold digits
-    digit_patterns = {
-        '1': [0b0110,0b1110,0b0110,0b0110,0b0110,0b0110,0b0110,0b1111,0b1111,0b0110],
-        '2': [0b0111,0b1111,0b1101,0b0001,0b0010,0b0100,0b1000,0b1111,0b1111,0b1111],
-        '3': [0b1111,0b1111,0b0001,0b0010,0b0110,0b0001,0b1101,0b1111,0b0111,0b0110],
-        '4': [0b1000,0b1100,0b1110,0b1111,0b1011,0b1001,0b1000,0b1000,0b1000,0b1000],
-        '5': [0b1111,0b1111,0b1000,0b1110,0b1111,0b0001,0b0001,0b1111,0b1111,0b0111],
-        '6': [0b0111,0b1111,0b1100,0b1110,0b1111,0b1001,0b1001,0b1111,0b0111,0b0110],
-        '7': [0b1111,0b1111,0b0001,0b0010,0b0100,0b1000,0b1000,0b1000,0b1000,0b1000],
-        '8': [0b0110,0b1111,0b1001,0b1111,0b0110,0b1001,0b1001,0b1111,0b1111,0b0110],
-        '9': [0b0110,0b1111,0b1001,0b1001,0b1111,0b0111,0b0001,0b1111,0b1111,0b0110],
-        '0': [0b0110,0b1111,0b1001,0b1001,0b1001,0b1001,0b1001,0b1111,0b1111,0b0110],
-    }
-    for i, ch in enumerate(rank_str):
-        pattern = digit_patterns.get(ch, digit_patterns['0'])
-        x = x_base + i * 12
-        for row in range(10):
-            bits = pattern[row]
-            for col in range(4):
-                if bits & (1 << (3 - col)):
-                    draw_pixel(x + col * 2, y_base + row * 1, color)
-                    draw_pixel(x + col * 2 + 1, y_base + row * 1, color)
-
 def draw_scaled_hline(x0, y0, x1, y1):
     if x0 > x1:
         return
@@ -293,7 +250,6 @@ tracking_url = f'http://{server_ip}:9020/ping'
 last_price = "---"
 last_value = "---"
 last_time = "--:--:--"
-current_rank = 99  # large default
 
 name_for_mac = {
     '34:98:7A:07:13:B4': "Sydney's",
@@ -305,40 +261,40 @@ name_for_mac = {
 }
 display_name = name_for_mac.get(mac_str, "Chris's")
 
-# === Data fetch ===
-def fetch_data():
-    global last_price, last_value, last_time, current_rank
+def fetch_info():
+    global last_price, last_value, last_time
     try:
         r = urequests.get(f'{data_proxy_url}/{coin_endpoint}', timeout=10)
         price_text = r.text.strip()
         r.close()
         if price_text != "error":
             price = float(price_text)
+            # Round to nearest dollar ONLY for Bitcoin
             if coin == 'BTC':
-                last_price = f"${round(price)}"
+                displayed_price = round(price)
+                last_price = f"${displayed_price}"
             else:
                 last_price = f"${price}"
-            last_value = f"{price * amount:.2f}"
+            
+            value = price * amount
+            last_value = value
     except:
         pass
-
+    
     try:
         r = urequests.get(f'{data_proxy_url}/time', timeout=10)
-        t = r.text.strip()
+        time_text = r.text.strip()
         r.close()
-        if t != "error" and len(t) == 8:
-            hh = (int(t[:2]) + 1) % 24
-            last_time = f"{hh:02d}:{t[3:5]}"
+        if time_text != "error" and len(time_text) == 8:
+            hh_mm = time_text[:5]
+            hh = int(hh_mm[:2])
+            mm = hh_mm[3:]
+            
+            new_hh = (hh + 1) % 24
+            
+            last_time = f"{new_hh:02d}:{mm}"
     except:
         pass
-
-    try:
-        r = urequests.get(f'{data_proxy_url}/rank', timeout=10)
-        rank_json = ujson.loads(r.text)
-        r.close()
-        current_rank = rank_json.get(mac_str, 99)
-    except:
-        current_rank = 99
 
 
 # Ping server with MAC once
@@ -373,8 +329,6 @@ while True:
     draw_text(8, 42, f"VAL:${last_value:.2f}")
     draw_text(8, 62, "TIME:" + last_time)
     draw_coin_logo(130, 35)
-    if current_rank < 99:
-        draw_rank(str(current_rank), current_rank)
     # Accurate 60-second delay with idle (WiFi-friendly)
     current_time = time.ticks_ms()
     it_C += 1
