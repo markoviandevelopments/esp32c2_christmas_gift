@@ -201,7 +201,7 @@ def draw_rank(rank_str, rank_num):
 
     # Medal position and size (fits nicely beside/below logo)
     cx = 145   # Center X - adjust ±10 if needed for your logo placement
-    cy = 61    # Center Y - lower to avoid logo overlap
+    cy = 62    # Center Y - lower to avoid logo overlap
     r = 12     # Larger radius for visible medal
 
     # Draw medal: dark fill first
