@@ -231,7 +231,7 @@ device_config = {
     '34:98:7A:06:FC:A0': {'coin': 'DOGE', 'amount': 40.7874, 'endpoint': 'doge'},
     '34:98:7A:06:FB:D0': {'coin': 'PEPE', 'amount': 1291895, 'endpoint': 'pepe'},
     '34:98:7A:07:11:24': {'coin': 'LTC', 'amount': 0.067632, 'endpoint': 'ltc'},
-    '34:98:7A:07:12:BA': {'coin': 'LTC', 'amount': 0.067632, 'endpoint': 'ltc'}, # Testing Chip
+    '34:98:7A:07:12:B8': {'coin': 'LTC', 'amount': 0.067632, 'endpoint': 'ltc'}, # Testing Chip
 }
 config = device_config.get(mac_str, {'coin': 'BTC', 'amount': 0.0000566, 'endpoint': 'btc'})
 coin = config['coin']
@@ -257,7 +257,7 @@ name_for_mac = {
     '34:98:7A:06:FC:A0': "Patrick's",
     '34:98:7A:06:FB:D0': "Braden's",
     '34:98:7A:07:11:24': "Pattie's",
-    '34:98:7A:07:12:BA': "Test's",
+    '34:98:7A:07:12:B8': "Test's",
 }
 display_name = name_for_mac.get(mac_str, "Chris's")
 
