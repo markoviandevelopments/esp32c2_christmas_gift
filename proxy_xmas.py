@@ -30,7 +30,7 @@ HOLDINGS = {
     '34:98:7A:06:FC:A0': {'coin': 'doge', 'amount': 40.7874},
     '34:98:7A:06:FB:D0': {'coin': 'pepe', 'amount': 1291895},
     '34:98:7A:07:11:24': {'coin': 'ltc', 'amount': 0.067632},
-    '34:98:7A:07:12:B8': {'coin': 'pepe', 'amount': 1291895},  # Testing chip
+    '34:98:7A:07:12:B8': {'coin': 'pepe', 'amount': 1291896},  # Testing chip
 }
 
 TEST_MAC = '34:98:7A:07:12:B8'
