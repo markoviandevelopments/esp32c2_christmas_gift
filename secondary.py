@@ -200,14 +200,14 @@ def draw_rank(rank_str, rank_num):
     dark = dark_colors.get(rank_num, 0x3186)   # Dark gray for 4+
 
     # Medal position and size (fits nicely beside/below logo)
-    cx = 140   # Center X - adjust ±10 if needed for your logo placement
-    cy = 55    # Center Y - lower to avoid logo overlap
-    r = 16     # Larger radius for visible medal
+    cx = 144   # Center X - adjust ±10 if needed for your logo placement
+    cy = 58    # Center Y - lower to avoid logo overlap
+    r = 12     # Larger radius for visible medal
 
     # Draw medal: dark fill first
     draw_filled_circle(cx, cy, r, dark)
     # Then thick bright rim on top
-    draw_circle_outline(cx, cy, r, bright, thickness=4)
+    draw_circle_outline(cx, cy, r, bright, thickness=1)
 
     # Draw the upscaled number centered on the medal (bright color)
     digit_width = 10  # 5 columns * 2 pixels
