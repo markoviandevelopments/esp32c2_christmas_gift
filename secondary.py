@@ -171,7 +171,7 @@ def draw_filled_circle(xc, yc, r, color):
                 if 0 <= px < 160 and 0 <= py < 80:
                     draw_pixel(px, py, color)
 
-def draw_circle_outline(xc, yc, r, color, thickness=3):
+def draw_circle_outline(xc, yc, r, color, thickness=1):
     # Thick outline by distance range
     outer = (r + 1) * (r + 1)
     inner = (r - thickness) * (r - thickness)
@@ -202,7 +202,7 @@ def draw_rank(rank_str, rank_num):
     color = colors.get(rank_num, 0xFFFF)  # White for 4+
     dark = dark_colors.get(rank_num, 0x528A)     # Dark gray for 4+
     
-# Medal position and size
+    # Medal position and size
     cx = 135     # Center X (tweak ±5 if it overlaps logo too much)
     cy = 62       # Center Y
     r = 10        # Radius — fits single digit perfectly
