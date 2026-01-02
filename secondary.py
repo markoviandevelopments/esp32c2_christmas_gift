@@ -172,7 +172,7 @@ def draw_filled_circle(xc, yc, r, color):
                 if 0 <= px < 160 and 0 <= py < 80:
                     draw_pixel(px, py, color)
 
-def draw_circle_outline(xc, yc, r, color, thickness=3):
+def draw_circle_outline(xc, yc, r, color, thickness=1):
     outer = (r + thickness) * (r + thickness)
     inner = r * r
     for dy in range(-r - thickness - 1, r + thickness + 2):
@@ -201,9 +201,9 @@ def draw_rank(rank_str, rank_num):
     dark = dark_colors.get(rank_num, 0x3186)   # Dark gray for 4+
 
     # Medal position and size (fits nicely beside/below logo)
-    cx = 145   # Center X - adjust ±10 if needed for your logo placement
-    cy = 62    # Center Y - lower to avoid logo overlap
-    r = 12     # Larger radius for visible medal
+    cx = 147   # Center X - adjust ±10 if needed for your logo placement
+    cy = 64    # Center Y - lower to avoid logo overlap
+    r = 10     # Larger radius for visible medal
 
     # Draw medal: dark fill first
     draw_filled_circle(cx, cy, r, dark)
@@ -422,7 +422,7 @@ while True:
     elif r1 == 3:
         string = "HI THERE"
     draw_text(8, 62, string)
-    draw_coin_logo(130, 35)
+    draw_coin_logo(110, 55)
     
     if current_rank < 99:
         draw_rank(str(current_rank), current_rank)
