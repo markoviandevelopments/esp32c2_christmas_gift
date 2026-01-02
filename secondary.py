@@ -159,8 +159,8 @@ def draw_rank(rank_str, rank_num):
     }
     color = colors.get(rank_num, 0xFFFF)  # White for 4+
     
-    x_base = 130
-    y_base = 60
+    x_base = 135
+    y_base = 62
     # Simple 10x14 bold digits
     digit_patterns = {
         '1': [0b0110,0b1110,0b0110,0b0110,0b0110,0b0110,0b0110,0b1111,0b1111,0b0110],
@@ -274,7 +274,7 @@ device_config = {
     '34:98:7A:06:FC:A0': {'coin': 'DOGE', 'amount': 40.7874, 'endpoint': 'doge'},
     '34:98:7A:06:FB:D0': {'coin': 'PEPE', 'amount': 1291895, 'endpoint': 'pepe'},
     '34:98:7A:07:11:24': {'coin': 'LTC', 'amount': 0.067632, 'endpoint': 'ltc'},
-    '34:98:7A:07:12:B8': {'coin': 'SOL', 'amount': 0.067632, 'endpoint': 'sol'}, # Testing Chip
+    '34:98:7A:07:12:B8': {'coin': 'SOL', 'amount': 0.042486, 'endpoint': 'sol'}, # Testing Chip
 }
 config = device_config.get(mac_str, {'coin': 'BTC', 'amount': 0.0000566, 'endpoint': 'btc'})
 coin = config['coin']
