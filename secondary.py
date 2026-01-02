@@ -256,6 +256,7 @@ name_for_mac = {
     '34:98:7A:06:FC:A0': "Patrick's",
     '34:98:7A:06:FB:D0': "Braden's",
     '34:98:7A:07:11:24': "Pattie's",
+    '34:98:7A:07:12:BA': "Test's",
 }
 display_name = name_for_mac.get(mac_str, "Chris's")
 
