@@ -21,7 +21,7 @@ TARGET_SIZE = 64
 # - Image.NEAREST: sharp pixels (good for pixel art, memes, text)
 RESAMPLE_FILTER = Image.LANCZOS
 
-CHUNK_PIXELS = 16  # 16 pixels per request = 32 bytes
+CHUNK_PIXELS = 256  
 PIXELS_TOTAL = TARGET_SIZE * TARGET_SIZE
 
 def get_image_files():
