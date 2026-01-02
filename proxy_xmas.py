@@ -1,5 +1,5 @@
 # proxy_server.py - Cached proxy for prices, time, and RGB565 logos (with local logo storage)
-from flask import Flask
+from flask import Flask, jsonify
 import requests
 import threading
 import time
