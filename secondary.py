@@ -208,7 +208,7 @@ def draw_rank(rank_str, rank_num):
     r = 10        # Radius — fits single digit perfectly
 
     # Draw medal: dark fill + thick bright rim
-    draw_filled_circle(cx, cy, r, dark)
+    #draw_filled_circle(cx, cy, r, dark)
     draw_circle_outline(cx, cy, r + 1, bright, thickness=3)
 
     # Draw the upscaled number centered in the medal
