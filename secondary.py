@@ -200,8 +200,8 @@ def draw_rank(rank_str, rank_num):
     dark = dark_colors.get(rank_num, 0x3186)   # Dark gray for 4+
 
     # Medal position and size (fits nicely beside/below logo)
-    cx = 144   # Center X - adjust ±10 if needed for your logo placement
-    cy = 58    # Center Y - lower to avoid logo overlap
+    cx = 145   # Center X - adjust ±10 if needed for your logo placement
+    cy = 61    # Center Y - lower to avoid logo overlap
     r = 12     # Larger radius for visible medal
 
     # Draw medal: dark fill first
