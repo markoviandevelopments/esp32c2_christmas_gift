@@ -205,7 +205,7 @@ def draw_rank(rank_str, rank_num):
 # Medal position and size
     cx = 135     # Center X (tweak ±5 if it overlaps logo too much)
     cy = 62       # Center Y
-    r = 15        # Radius — fits single digit perfectly
+    r = 10        # Radius — fits single digit perfectly
 
     # Draw medal: dark fill + thick bright rim
     draw_filled_circle(cx, cy, r, dark)
