@@ -4,6 +4,7 @@ import machine
 import network
 import gc
 import ujson
+import usocket
 # === Print free memory before anything else ===
 print("Free memory at secondary start:", gc.mem_free())
 # === Pins ===
@@ -294,6 +295,16 @@ def fetch_info():
             last_time = f"{new_hh:02d}:{mm}"
     except:
         pass
+
+
+# Ping server with MAC once
+try:
+    sock = usocket.socket(usocket.AF_INET, usocket.SOCK_STREAM)
+    sock.connect((server_ip, 9022))
+    sock.send(mac_str.encode())
+    sock.close()
+except Exception as e:
+    pass
 
 # === Main loop ===
 it_C = 0
