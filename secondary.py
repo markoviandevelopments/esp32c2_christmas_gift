@@ -171,14 +171,11 @@ def draw_filled_circle(xc, yc, r, color):
                 if 0 <= px < 160 and 0 <= py < 80:
                     draw_pixel(px, py, color)
 
-def draw_circle_outline(xc, yc, r, color, thickness=1):
-    # Thick outline by distance range
-    outer = (r + 1) * (r + 1)
-    inner = (r - thickness) * (r - thickness)
-    if inner < 0:
-        inner = 0
-    for dy in range(-r - 2, r + 3):
-        for dx in range(-r - 2, r + 3):
+def draw_circle_outline(xc, yc, r, color, thickness=3):
+    outer = (r + thickness) * (r + thickness)
+    inner = r * r
+    for dy in range(-r - thickness - 1, r + thickness + 2):
+        for dx in range(-r - thickness - 1, r + thickness + 2):
             dist = dx * dx + dy * dy
             if inner < dist <= outer:
                 px = xc + dx
@@ -186,44 +183,45 @@ def draw_circle_outline(xc, yc, r, color, thickness=1):
                 if 0 <= px < 160 and 0 <= py < 80:
                     draw_pixel(px, py, color)
 
-# === Draw large rank number in bottom right ===
 def draw_rank(rank_str, rank_num):
-    # Colors in RGB565
+    # Bright medal colors (RGB565)
     colors = {
         1: 0xFFE0,  # Gold
         2: 0xC618,  # Silver
         3: 0xCD72,  # Bronze
     }
+    # Dark fill versions
     dark_colors = {
-        1: 0x7380,  # Dark gold
-        2: 0x528A,  # Dark silver
-        3: 0x8A40,  # Dark bronze
+        1: 0x83E0,  # Darker gold
+        2: 0x630C,  # Darker silver/gray
+        3: 0xA440,  # Darker bronze
     }
-    bright = bright_colors.get(rank_num, 0xFFFF)
-    dark = dark_colors.get(rank_num, 0x528A)     # Dark gray for 4+
-    
-    # Medal position and size
-    cx = 135     # Center X (tweak ±5 if it overlaps logo too much)
-    cy = 62       # Center Y
-    r = 10        # Radius — fits single digit perfectly
+    bright = colors.get(rank_num, 0xFFFF)      # White for 4+
+    dark = dark_colors.get(rank_num, 0x3186)   # Dark gray for 4+
 
-    # Draw medal: dark fill + thick bright rim
-    #draw_filled_circle(cx, cy, r, dark)
-    draw_circle_outline(cx, cy, r + 1, bright, thickness=1)
+    # Medal position and size (fits nicely beside/below logo)
+    cx = 140   # Center X - adjust ±10 if needed for your logo placement
+    cy = 55    # Center Y - lower to avoid logo overlap
+    r = 16     # Larger radius for visible medal
 
-    # Draw the upscaled number centered in the medal
-    digit_width = 10   # 5 cols * 2
-    total_width = len(rank_str) * digit_width + (len(rank_str) - 1) * 2  # small gap if multi-digit
+    # Draw medal: dark fill first
+    draw_filled_circle(cx, cy, r, dark)
+    # Then thick bright rim on top
+    draw_circle_outline(cx, cy, r, bright, thickness=4)
+
+    # Draw the upscaled number centered on the medal (bright color)
+    digit_width = 10  # 5 columns * 2 pixels
+    total_width = len(rank_str) * digit_width + (len(rank_str) - 1) * 3  # spacing
     x_base = cx - total_width // 2
-    y_base = cy - 8    # 16 rows / 2
+    y_base = cy - 8   # Center vertically (16 rows tall)
 
     for i, ch in enumerate(rank_str):
         pattern = digit_patterns.get(ch, digit_patterns['0'])
-        x = x_base + i * (digit_width + 2)
+        x = x_base + i * (digit_width + 3)  # small gap between multi-digit
         for row in range(16):
             bits = pattern[row]
             for col in range(5):
-                if bits & (1 << (4 - col)):  # bit 4 = leftmost column
+                if bits & (1 << (4 - col)):  # Leftmost bit = col 0
                     draw_pixel(x + col * 2, y_base + row, bright)
                     draw_pixel(x + col * 2 + 1, y_base + row, bright)
 
