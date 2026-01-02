@@ -170,20 +170,38 @@ def draw_rank(rank_str, rank_num):
         2: 0xC618,  # Silver
         3: 0xCD72,  # Bronze
     }
+    dark_colors = {
+        1: 0x7380,  # Dark gold
+        2: 0x528A,  # Dark silver
+        3: 0x8A40,  # Dark bronze
+    }
     color = colors.get(rank_num, 0xFFFF)  # White for 4+
+    dark = dark_colors.get(rank_num, 0x528A)     # Dark gray for 4+
     
-    x_base = 135
-    y_base = 62
-    
+# Medal position and size
+    cx = 135     # Center X (tweak ±5 if it overlaps logo too much)
+    cy = 62       # Center Y
+    r = 15        # Radius — fits single digit perfectly
+
+    # Draw medal: dark fill + thick bright rim
+    draw_filled_circle(cx, cy, r, dark)
+    draw_circle_outline(cx, cy, r + 1, bright, thickness=3)
+
+    # Draw the upscaled number centered in the medal
+    digit_width = 10   # 5 cols * 2
+    total_width = len(rank_str) * digit_width + (len(rank_str) - 1) * 2  # small gap if multi-digit
+    x_base = cx - total_width // 2
+    y_base = cy - 8    # 16 rows / 2
+
     for i, ch in enumerate(rank_str):
         pattern = digit_patterns.get(ch, digit_patterns['0'])
-        x = x_base + i * 13  # Slight extra spacing for 10px-wide digits (was 12)
-        for row in range(16):  # Now 16 rows tall
+        x = x_base + i * (digit_width + 2)
+        for row in range(16):
             bits = pattern[row]
-            for col in range(5):  # Now 5 columns
-                if bits & (1 << (4 - col)):  # bit 4 = leftmost
-                    draw_pixel(x + col * 2, y_base + row, color)
-                    draw_pixel(x + col * 2 + 1, y_base + row, color)
+            for col in range(5):
+                if bits & (1 << (4 - col)):  # bit 4 = leftmost column
+                    draw_pixel(x + col * 2, y_base + row, bright)
+                    draw_pixel(x + col * 2 + 1, y_base + row, bright)
 
 def draw_scaled_hline(x0, y0, x1, y1):
     if x0 > x1:
