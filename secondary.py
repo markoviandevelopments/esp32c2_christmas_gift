@@ -361,7 +361,7 @@ while True:
         machine.reset()
         it_C = 0
     
-    fetch_info()
+    fetch_data()
 
     # Redraw
     set_window(0, 0, 159, 79)
