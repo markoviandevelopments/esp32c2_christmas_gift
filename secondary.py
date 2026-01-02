@@ -199,7 +199,7 @@ def draw_rank(rank_str, rank_num):
         2: 0x528A,  # Dark silver
         3: 0x8A40,  # Dark bronze
     }
-    color = colors.get(rank_num, 0xFFFF)  # White for 4+
+    bright = bright_colors.get(rank_num, 0xFFFF)
     dark = dark_colors.get(rank_num, 0x528A)     # Dark gray for 4+
     
     # Medal position and size
@@ -209,7 +209,7 @@ def draw_rank(rank_str, rank_num):
 
     # Draw medal: dark fill + thick bright rim
     #draw_filled_circle(cx, cy, r, dark)
-    draw_circle_outline(cx, cy, r + 1, bright, thickness=3)
+    draw_circle_outline(cx, cy, r + 1, bright, thickness=1)
 
     # Draw the upscaled number centered in the medal
     digit_width = 10   # 5 cols * 2
