@@ -136,7 +136,6 @@ def get_logo(coin):
 def get_rank():
     with lock:
         prices = cached_prices.copy()
-
     # Compute USD values
     values = {}
     for mac, info in HOLDINGS.items():
@@ -147,24 +146,20 @@ def get_rank():
             values[mac] = usd
         except:
             values[mac] = 0.0
-
     # Real ranking: exclude test chip
     real_macs = [m for m in values if m != TEST_MAC]
     real_sorted = sorted(real_macs, key=lambda m: values[m], reverse=True)
     real_rank = {mac: idx + 1 for idx, mac in enumerate(real_sorted)}
-
-    # Hypothetical ranking including test chip (for test chip display)
+    # Hypothetical ranking including test chip
     all_sorted = sorted(values.keys(), key=lambda m: values[m], reverse=True)
     hypo_rank = {mac: idx + 1 for idx, mac in enumerate(all_sorted)}
-
-    # Each device gets its rank as if the test chip weren't counting (except test chip gets hypo rank)
+    # Build response with native int
     response = {}
     for mac in HOLDINGS:
         if mac == TEST_MAC:
-            response[mac] = hypo_rank[mac]      # shows what it would be
+            response[mac] = int(hypo_rank[mac])  # Force to Python int
         else:
-            response[mac] = real_rank.get(mac, 99)
-
+            response[mac] = int(real_rank.get(mac, 99))
     return jsonify(response)
 
 @app.route('/')
