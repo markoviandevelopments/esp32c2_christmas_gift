@@ -413,7 +413,7 @@ while True:
     draw_text(8, 4, display_name + " " + coin)
     draw_text(8, 22, f"{coin}:" + last_price)
     draw_text(8, 42, f"VAL:${last_value:.2f}")
-    draw_text(8, 62, "TIME:" + last_time)
+    draw_text(8, 62, "HOWDY Y'ALL")
     draw_coin_logo(130, 35)
     
     if current_rank < 99:
