@@ -318,7 +318,7 @@ def fetch_data():
                 last_price = f"${round(price)}"
             else:
                 last_price = f"${price}"
-            last_value = f"{price * amount:.2f}"
+            last_value = price * amount  # Keep as float
     except:
         pass
 
@@ -337,7 +337,8 @@ def fetch_data():
         rank_json = ujson.loads(r.text)
         r.close()
         current_rank = rank_json.get(mac_str, 99)
-    except:
+    except Exception as e:
+        print("Rank fetch error:", e)  # Optional debug
         current_rank = 99
 
 
@@ -373,6 +374,7 @@ while True:
     draw_text(8, 42, f"VAL:${last_value:.2f}")
     draw_text(8, 62, "TIME:" + last_time)
     draw_coin_logo(130, 35)
+    
     if current_rank < 99:
         draw_rank(str(current_rank), current_rank)
     # Accurate 60-second delay with idle (WiFi-friendly)
