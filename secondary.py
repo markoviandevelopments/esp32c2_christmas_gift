@@ -162,6 +162,30 @@ def draw_pixel(x, y, color565):
         send_byte(color565 >> 8, 1)
         send_byte(color565 & 0xFF, 1)
 
+def draw_filled_circle(xc, yc, r, color):
+    for dy in range(-r, r + 1):
+        for dx in range(-r, r + 1):
+            if dx * dx + dy * dy <= r * r:
+                px = xc + dx
+                py = yc + dy
+                if 0 <= px < 160 and 0 <= py < 80:
+                    draw_pixel(px, py, color)
+
+def draw_circle_outline(xc, yc, r, color, thickness=3):
+    # Thick outline by distance range
+    outer = (r + 1) * (r + 1)
+    inner = (r - thickness) * (r - thickness)
+    if inner < 0:
+        inner = 0
+    for dy in range(-r - 2, r + 3):
+        for dx in range(-r - 2, r + 3):
+            dist = dx * dx + dy * dy
+            if inner < dist <= outer:
+                px = xc + dx
+                py = yc + dy
+                if 0 <= px < 160 and 0 <= py < 80:
+                    draw_pixel(px, py, color)
+
 # === Draw large rank number in bottom right ===
 def draw_rank(rank_str, rank_num):
     # Colors in RGB565
