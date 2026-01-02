@@ -418,9 +418,9 @@ while True:
     if r1 == 1:
         string = "HOWDY"
     elif r1 == 2:
-        string = "YO"
+        string = "HELLO"
     elif r1 == 3:
-        string = "BRUV"
+        string = "HI THERE"
     draw_text(8, 62, string)
     draw_coin_logo(130, 35)
     
