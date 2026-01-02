@@ -195,7 +195,7 @@ def draw_rank(rank_str, rank_num):
     dark_colors = {
         1: 0x83E0,  # Darker gold
         2: 0x630C,  # Darker silver/gray
-        3: 0x83E0,  # Darker bronze
+        3: 0x0000,  # Darker bronze
     }
     bright = colors.get(rank_num, 0xFFFF)      # White for 4+
     dark = dark_colors.get(rank_num, 0x3186)   # Dark gray for 4+
