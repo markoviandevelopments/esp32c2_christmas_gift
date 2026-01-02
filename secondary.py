@@ -328,7 +328,7 @@ while True:
     draw_text(8, 22, f"{coin}:" + last_price)
     draw_text(8, 42, f"VAL:${last_value:.2f}")
     draw_text(8, 62, "TIME:" + last_time)
-    draw_coin_logo(130, 27)
+    draw_coin_logo(130, 35)
     # Accurate 60-second delay with idle (WiFi-friendly)
     current_time = time.ticks_ms()
     it_C += 1
