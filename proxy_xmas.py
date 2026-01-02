@@ -23,6 +23,18 @@ last_fetch_time = 0
 CACHE_SECONDS = 180
 lock = threading.Lock()
 
+# Hard-coded holdings
+HOLDINGS = {
+    '34:98:7A:07:13:B4': {'coin': 'xrp', 'amount': 2.76412},
+    '34:98:7A:07:14:D0': {'coin': 'sol', 'amount': 0.042486},
+    '34:98:7A:06:FC:A0': {'coin': 'doge', 'amount': 40.7874},
+    '34:98:7A:06:FB:D0': {'coin': 'pepe', 'amount': 1291895},
+    '34:98:7A:07:11:24': {'coin': 'ltc', 'amount': 0.067632},
+    '34:98:7A:07:12:B8': {'coin': 'sol', 'amount': 0.067632},  # Testing chip
+}
+
+TEST_MAC = '34:98:7A:07:12:B8'
+
 def rgb565(r, g, b):
     return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
 
@@ -119,6 +131,41 @@ def get_logo(coin):
         if logo_data == "error":
             return "error", 404
         return logo_data  # Plain text comma-separated
+
+@app.route('/rank')
+def get_rank():
+    with lock:
+        prices = cached_prices.copy()
+
+    # Compute USD values
+    values = {}
+    for mac, info in HOLDINGS.items():
+        coin_key = info['coin']
+        try:
+            price = float(prices.get(coin_key, "0"))
+            usd = price * info['amount']
+            values[mac] = usd
+        except:
+            values[mac] = 0.0
+
+    # Real ranking: exclude test chip
+    real_macs = [m for m in values if m != TEST_MAC]
+    real_sorted = sorted(real_macs, key=lambda m: values[m], reverse=True)
+    real_rank = {mac: idx + 1 for idx, mac in enumerate(real_sorted)}
+
+    # Hypothetical ranking including test chip (for test chip display)
+    all_sorted = sorted(values.keys(), key=lambda m: values[m], reverse=True)
+    hypo_rank = {mac: idx + 1 for idx, mac in enumerate(all_sorted)}
+
+    # Each device gets its rank as if the test chip weren't counting (except test chip gets hypo rank)
+    response = {}
+    for mac in HOLDINGS:
+        if mac == TEST_MAC:
+            response[mac] = hypo_rank[mac]      # shows what it would be
+        else:
+            response[mac] = real_rank.get(mac, 99)
+
+    return jsonify(response)
 
 @app.route('/')
 def index():
