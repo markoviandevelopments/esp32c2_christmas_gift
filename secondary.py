@@ -331,6 +331,7 @@ def draw_big_coin_logo():
             send_byte(0x00, 1)
             send_byte(0x00, 1)
         draw_coin_logo(70, 30)
+
 # === XRP logo function (unchanged from your version) ===
 def draw_xrp_logo(center_x, center_y, radius):
     # Fill white circle
@@ -372,6 +373,7 @@ def draw_xrp_logo(center_x, center_y, radius):
     draw_line(points1)
     draw_line(points2)
     draw_line(points3)
+    
 # === Get MAC and WiFi interface ===
 mac_bytes = machine.unique_id()
 mac_str = ':'.join(['{:02X}'.format(b) for b in mac_bytes]).upper()
@@ -519,11 +521,13 @@ while True:
     draw_text(8, 62, string)
     
     draw_coin_logo(110, 55)
+    
+    if current_rank < 99:
+        draw_rank(str(current_rank), current_rank)
 
     if random.randint(1,2) > 0:
             draw_big_coin_logo()  # Full-screen every update (covers text/rank—good for splash)
-    if current_rank < 99:
-        draw_rank(str(current_rank), current_rank)
+    
     # Accurate 60-second delay with idle (WiFi-friendly)
     current_time = time.ticks_ms()
     it_C += 1
