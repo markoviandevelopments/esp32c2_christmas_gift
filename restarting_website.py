@@ -7,7 +7,7 @@ import re
 
 app = Flask(__name__)
 
-# Hard-coded MAC to name/coin mapping (add/update as needed)
+# MAC to friendly info
 MAC_INFO = {
     '34:98:7A:07:13:B4': {"name": "Sydney's", "coin": "XRP"},
     '34:98:7A:07:14:D0': {"name": "Alyssa's", "coin": "SOL"},
@@ -16,12 +16,11 @@ MAC_INFO = {
     '34:98:7A:07:11:24': {"name": "Pattie's", "coin": "LTC"},
     '34:98:7A:07:12:B8': {"name": "Test's", "coin": "DOGE (test)"},
     '34:98:7A:07:06:B4': {"name": "Chris's", "coin": "BTC"},
-    # Add more if new devices appear
 }
 
-LOG_FILE = "/home/preston/.pm2/logs/mac-server-out.log"
+LOG_FILE = "/home/preston/mac_connection_logs.txt"
 
-# Global dict to hold last seen datetime for each MAC
+# Global: MAC -> latest datetime
 last_seen = {mac: None for mac in MAC_INFO}
 
 lock = threading.Lock()
@@ -31,7 +30,7 @@ def parse_log():
     temp_seen = {mac: None for mac in MAC_INFO}
     
     if not os.path.exists(LOG_FILE):
-        print(f"[{datetime.now()}] Log file not found: {LOG_FILE}")
+        print(f"[{datetime.now()}] Log file not found")
         return
     
     try:
@@ -40,46 +39,31 @@ def parse_log():
                 line = line.strip()
                 if not line:
                     continue
-                
-                # PM2 log lines typically start with "YYYY-MM-DD HH:MM:SS: message"
-                # Extract timestamp if present
-                timestamp = None
-                match = re.match(r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}):', line)
-                if match:
-                    ts_str = match.group(1)
+                parts = line.split(' | ')
+                if len(parts) != 3:
+                    continue
+                ts_str, ip_port, mac = parts
+                mac = mac.upper()
+                if mac in temp_seen:
                     try:
                         timestamp = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
+                        temp_seen[mac] = timestamp
                     except ValueError:
-                        timestamp = None
-                    message = line[match.end():].strip()
-                else:
-                    message = line
-                
-                if "Received MAC:" in message:
-                    parts = message.split("Received MAC:")
-                    if len(parts) > 1:
-                        mac = parts[1].strip().upper()
-                        if mac in temp_seen:
-                            # Use the latest (last in file) timestamp
-                            if timestamp:
-                                temp_seen[mac] = timestamp
-                            else:
-                                # Fallback to now if no timestamp
-                                temp_seen[mac] = datetime.now()
+                        pass  # Bad timestamp, skip
         
         with lock:
             last_seen.update(temp_seen)
-        print(f"[{datetime.now()}] Log parsed - updated last seen times")
+        print(f"[{datetime.now()}] Log parsed successfully")
     
     except Exception as e:
-        print(f"[{datetime.now()}] Error parsing log: {e}")
+        print(f"[{datetime.now()}] Parse error: {e}")
 
 def background_refresh():
     while True:
         parse_log()
         time.sleep(300)  # Every 5 minutes
 
-# HTML template for the website
+# Same nice HTML template as before
 TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -100,14 +84,9 @@ TEMPLATE = """
 </head>
 <body>
     <h1>Device Last Restart Times</h1>
-    <p style="text-align:center;">Data refreshed every 5 minutes from mac-server logs. Times in server local timezone.</p>
+    <p style="text-align:center;">Refreshed every 5 minutes from connection logs. Times in server timezone.</p>
     <table>
-        <tr>
-            <th>Name</th>
-            <th>Coin</th>
-            <th>MAC Address</th>
-            <th>Last Restart</th>
-        </tr>
+        <tr><th>Name</th><th>Coin</th><th>MAC</th><th>Last Connection (Restart)</th></tr>
         {% for mac in macs %}
         <tr>
             <td>{{ info[mac]['name'] }}</td>
@@ -125,24 +104,20 @@ TEMPLATE = """
         {% endfor %}
     </table>
     <p style="text-align:center; margin-top:40px; color:#666;">
-        Last log parse: {{ now.strftime("%Y-%m-%d %H:%M:%S") }}
+        Last update: {{ now.strftime("%Y-%m-%d %H:%M:%S") }}
     </p>
 </body>
 </html>
 """
 
 def timesince(dt):
-    if not dt:
-        return "unknown"
+    if not dt: return "unknown"
     delta = datetime.now() - dt
-    if delta.days > 0:
-        return f"{delta.days} days"
+    if delta.days > 0: return f"{delta.days} days"
     hours = delta.seconds // 3600
-    if hours > 0:
-        return f"{hours} hours"
+    if hours > 0: return f"{hours} hours"
     minutes = delta.seconds // 60
-    if minutes > 0:
-        return f"{minutes} minutes"
+    if minutes > 0: return f"{minutes} minutes"
     return "just now"
 
 @app.route('/')
@@ -159,12 +134,7 @@ def index():
         )
 
 if __name__ == '__main__':
-    # Initial parse
-    parse_log()
-    
-    # Start background refresh thread
+    parse_log()  # Initial load
     threading.Thread(target=background_refresh, daemon=True).start()
-    
-    print("Website starting on http://0.0.0.0:9024")
-    print("Open in browser: http://your-server-ip:9024")
+    print("Status website starting on http://0.0.0.0:9024")
     app.run(host='0.0.0.0', port=9024)
