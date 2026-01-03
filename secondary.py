@@ -283,13 +283,18 @@ def draw_coin_logo(x, y):
         draw_xrp_logo(x + 10, y + 10, 10)
 
 def draw_big_coin_logo():
+    # Always start with fresh black screen for big logo mode
+    set_window(0, 0, 159, 79)
+    for _ in range(160 * 80):
+        send_byte(0x00, 1)
+        send_byte(0x00, 1)
+
     try:
-        # Get chunk count
-        r = urequests.get(f'{data_proxy_url}/biglogo_chunks/{coin_endpoint}', timeout=20)
+        r = urequests.get(f'{data_proxy_url}/biglogo_chunks/{coin_endpoint}', timeout=25)
         text = r.text.strip()
         r.close()
         if not text.isdigit() or int(text) == 0:
-            draw_coin_logo(70, 30)  # Quick fallback if no big logo
+            draw_coin_logo(70, 30)  # Rare: no big logo on server
             return
         total_chunks = int(text)
     except:
@@ -297,18 +302,19 @@ def draw_big_coin_logo():
         return
 
     pixel_idx = 0
+    chunks_drawn = 0
     for chunk_id in range(total_chunks):
         try:
-            r = urequests.get(f'{data_proxy_url}/biglogo/{coin_endpoint}/{chunk_id}', timeout=25)
+            r = urequests.get(f'{data_proxy_url}/biglogo/{coin_endpoint}/{chunk_id}', timeout=30)
             text = r.text.strip()
             r.close()
-            if text == "error" or not text:
-                break  # Stop on bad chunk, keep what was drawn
+            if not text or text == "error":
+                break
             chunk_pixels = [int(p, 16) for p in text.split(',') if p]
+            chunks_drawn += 1
         except:
-            break  # Network blip - keep partial draw
+            break  # Network issue - stop but keep what was drawn
         
-        # Draw this chunk
         for color in chunk_pixels:
             if pixel_idx >= 12800:
                 break
@@ -319,17 +325,12 @@ def draw_big_coin_logo():
             send_byte(color & 0xFF, 1)
             pixel_idx += 1
         
-        time.sleep_ms(80)  # Gentle pause - helps slow connections
+        time.sleep_ms(100)  # Longer pause for reliable transfer
     
-    # Only full fallback if almost nothing drew (total fail)
-    if pixel_idx < 2000:
-        # Clear screen and draw small centered fallback
-        set_window(0, 0, 159, 79)
-        for _ in range(160 * 80):
-            send_byte(0x00, 1)
-            send_byte(0x00, 1)
+    # Only fallback if literally nothing drew (total fail)
+    if chunks_drawn == 0:
         draw_coin_logo(70, 30)
-    # Otherwise keep the (partial) big logo - looks good even if a chunk missed
+    # Otherwise: keep the partial/full big logo - looks great even incomplete
 
 # === XRP logo function (unchanged from your version) ===
 def draw_xrp_logo(center_x, center_y, radius):
