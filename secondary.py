@@ -545,7 +545,7 @@ while True:
         
     draw_text(8, 62, string)
     
-    draw_coin_logo(110, 55)
+    draw_coin_logo(114, 58)
     
     if current_rank < 99:
         draw_rank(str(current_rank), current_rank)
