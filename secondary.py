@@ -433,13 +433,13 @@ while True:
     draw_text(8, 22, f"{coin}:" + last_price)
     draw_text(8, 42, f"VAL:${last_value:.2f}")
     
-    string = "HOWDY Y'ALL"  # Fallback
+    string = "ERROR XD"  # Fallback
     r = random.randint(1, 3)
     # Identify if this device is Chris or Pattie for privacy rules
     is_chris = mac_str == '34:98:7A:07:06:B4'
     is_pattie = mac_str == '34:98:7A:07:11:24'
 
-    if r == 1:  # Random other device's rank + abbr
+    if 1 == 1:  # Random other device's rank + abbr
         if rank_dict and len(rank_dict) > 1:
             candidates = [m for m in rank_dict if m != mac_str]
             
@@ -449,8 +449,9 @@ while True:
                 candidates = [m for m in candidates if m != '34:98:7A:07:06:B4']
             
             if candidates:
-                # Safe random selection (indexing - works identically to random.choice)
-                rand_mac = candidates[random.randint(0, len(candidates) - 1)]
+                # Fixed syntax + safe indexing
+                idx = random.randint(0, len(candidates) - 1)
+                rand_mac = candidates[idx]
                 abbr = abbr_dict.get(rand_mac, "??")
                 o_rank = rank_dict.get(rand_mac, 99)
                 if o_rank < 99:
