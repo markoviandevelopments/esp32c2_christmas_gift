@@ -8,6 +8,7 @@ import io
 import os
 from zoneinfo import ZoneInfo  # Available in Python 3.9+, standard on modern Ubuntu
 import datetime
+import struct
 
 app = Flask(__name__)
 
@@ -24,7 +25,7 @@ CACHE_SECONDS = 180
 cached_big_logos = {}  # coin -> list of int RGB565 pixels (160x80 = 12800)
 BIG_WIDTH = 160
 BIG_HEIGHT = 80
-CHUNK_SIZE = 1000  # ~1000 pixels/chunk (~5-6KB response, safe)
+CHUNK_SIZE = 256  # ~1000 pixels/chunk (~5-6KB response, safe)
 lock = threading.Lock()
 
 # Hard-coded holdings
@@ -159,13 +160,16 @@ def biglogo_chunk(coin, chunk):
     coin = coin.lower()
     pixels = generate_big_logo(coin)
     if pixels is None:
-        return "error"
+        return b''  # empty bytes = error on client
     start = chunk * CHUNK_SIZE
     if start >= len(pixels):
-        return "error"
+        return b''
     end = min(start + CHUNK_SIZE, len(pixels))
     chunk_pixels = pixels[start:end]
-    return ','.join(f"0x{p:04X}" for p in chunk_pixels)
+    if not chunk_pixels:
+        return b''
+    # Binary RGB565, big-endian (high byte first)
+    return struct.pack(">{}H".format(len(chunk_pixels)), *chunk_pixels)
 
 @app.route('/time')
 def get_central_time():
