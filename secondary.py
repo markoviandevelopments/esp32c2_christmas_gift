@@ -533,7 +533,7 @@ while True:
         while time.ticks_diff(time.ticks_ms(), current_time) < 60000:
             machine.idle()  # Yields to WiFi/tasks - prevents network blockage
         draw_big_coin_logo()  # Full-screen every update (covers text/rank—good for splash)
-        draw_text(60, 4, f"VAL:${last_value:.2f}")
+        draw_text(40, 4, f"VAL:${last_value:.2f}")
     
     # Accurate 60-second delay with idle (WiFi-friendly)
     current_time = time.ticks_ms()
