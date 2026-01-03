@@ -126,8 +126,7 @@ digit_patterns = {
     '9': [14, 14, 17, 17, 17, 17, 15, 15, 1, 1, 2, 2, 12, 12, 0, 0],
 }
 
-last_current_rank = 99
-rank_dict = {}
+
 abbr_dict = {
     '34:98:7A:07:13:B4': "SY",
     '34:98:7A:07:14:D0': "AL",
@@ -137,6 +136,10 @@ abbr_dict = {
     '34:98:7A:07:12:B8': "TE",
     '34:98:7A:07:06:B4': "CR",
 }
+
+last_current_rank = 99
+rank_dict = {}
+last_rank_dict = {}     # Persistent full dict from last success
 
 # === Draw text ===
 def draw_text(x_start, y_start, text):
@@ -364,7 +367,7 @@ display_name = name_for_mac.get(mac_str, "Chris's")
 
 # === Data fetch ===
 def fetch_data():
-    global last_price, last_value, last_time, current_rank
+    global last_price, last_value, last_time, current_rank, last_current_rank, rank_dict, last_rank_dict
     try:
         r = urequests.get(f'{data_proxy_url}/{coin_endpoint}', timeout=10)
         price_text = r.text.strip()
@@ -393,13 +396,14 @@ def fetch_data():
         r = urequests.get(f'{data_proxy_url}/rank', timeout=10)
         rank_json = ujson.loads(r.text)
         r.close()
-        rank_dict = rank_json  # Full dict for phrases
+        last_rank_dict = rank_json  # Save full good dict
+        rank_dict = rank_json       # Use for this cycle
         new_rank = rank_json.get(mac_str, 99)
         current_rank = new_rank
         last_current_rank = new_rank
     except:
-        current_rank = last_current_rank  # Persist on fail
-        # rank_dict keeps old if possible
+        current_rank = last_current_rank
+        rank_dict = last_rank_dict  # Fall back to last good full dict
 
 
 # Ping server with MAC once
