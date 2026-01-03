@@ -26,6 +26,7 @@ cached_big_logos = {}  # coin -> list of int RGB565 pixels (160x80 = 12800)
 BIG_WIDTH = 160
 BIG_HEIGHT = 80
 CHUNK_SIZE = 256  # ~1000 pixels/chunk (~5-6KB response, safe)
+PRESERVE_ASPECT_RATIO = True  # Set False to force-stretch to 160x80 (original behavior)
 lock = threading.Lock()
 
 # Hard-coded holdings
@@ -79,22 +80,49 @@ def load_or_download_logo(coin, url):
 def generate_big_logo(coin):
     if coin in cached_big_logos:
         return cached_big_logos[coin]
-    
+   
     local_path = os.path.join(LOGO_DIR, f"{coin}.png")
     if not os.path.exists(local_path):
         cached_big_logos[coin] = None
         return None
-    
+   
     try:
         img = Image.open(local_path).convert('RGB')
-        img = img.resize((BIG_WIDTH, BIG_HEIGHT), Image.LANCZOS)
+        orig_w, orig_h = img.size
+        
+        if PRESERVE_ASPECT_RATIO:
+            # Uniform scale: limiting side fills its axis exactly
+            ratio = min(BIG_WIDTH / orig_w, BIG_HEIGHT / orig_h)
+            new_w = max(1, int(orig_w * ratio))   # Avoid zero size
+            new_h = max(1, int(orig_h * ratio))
+            img = img.resize((new_w, new_h), Image.LANCZOS)
+            
+            # Centering offsets for black bars
+            offset_x = (BIG_WIDTH - new_w) // 2
+            offset_y = (BIG_HEIGHT - new_h) // 2
+        else:
+            # Original forced stretch
+            img = img.resize((BIG_WIDTH, BIG_HEIGHT), Image.LANCZOS)
+            new_w, new_h = BIG_WIDTH, BIG_HEIGHT
+            offset_x = offset_y = 0
+        
+        # Generate full 160x80 pixel list (black where bars are)
         pixels = []
         for y in range(BIG_HEIGHT):
             for x in range(BIG_WIDTH):
-                r, g, b = img.getpixel((x, y))
-                pixels.append(rgb565(r, g, b))
+                if PRESERVE_ASPECT_RATIO and \
+                   (x < offset_x or x >= offset_x + new_w or
+                    y < offset_y or y >= offset_y + new_h):
+                    pixels.append(0)  # Explicit black for bars
+                else:
+                    px_x = x - offset_x
+                    px_y = y - offset_y
+                    r, g, b = img.getpixel((px_x, px_y))
+                    pixels.append(rgb565(r, g, b))
+        
         cached_big_logos[coin] = pixels
-        print(f"[{time.strftime('%H:%M:%S')}] Generated big 160x80 logo for {coin}")
+        print(f"[{time.strftime('%H:%M:%S')}] Generated big 160x80 logo for {coin} "
+              f"({'preserved AR' if PRESERVE_ASPECT_RATIO else 'stretched'})")
         return pixels
     except Exception as e:
         print(f"Big logo error {coin}: {e}")
