@@ -21,6 +21,10 @@ cached_time = "error"
 cached_logos = {}  # coin -> "0xFFFF,0x0000,..." string
 last_fetch_time = 0
 CACHE_SECONDS = 180
+cached_big_logos = {}  # coin -> list of int RGB565 pixels (160x80 = 12800)
+BIG_WIDTH = 160
+BIG_HEIGHT = 80
+CHUNK_SIZE = 1000  # ~1000 pixels/chunk (~5-6KB response, safe)
 lock = threading.Lock()
 
 # Hard-coded holdings
@@ -71,6 +75,31 @@ def load_or_download_logo(coin, url):
         print(f"Logo processing error for {coin}: {e}")
         return "error"
 
+def generate_big_logo(coin):
+    if coin in cached_big_logos:
+        return cached_big_logos[coin]
+    
+    local_path = os.path.join(LOGO_DIR, f"{coin}.png")
+    if not os.path.exists(local_path):
+        cached_big_logos[coin] = None
+        return None
+    
+    try:
+        img = Image.open(local_path).convert('RGB')
+        img = img.resize((BIG_WIDTH, BIG_HEIGHT), Image.LANCZOS)
+        pixels = []
+        for y in range(BIG_HEIGHT):
+            for x in range(BIG_WIDTH):
+                r, g, b = img.getpixel((x, y))
+                pixels.append(rgb565(r, g, b))
+        cached_big_logos[coin] = pixels
+        print(f"[{time.strftime('%H:%M:%S')}] Generated big 160x80 logo for {coin}")
+        return pixels
+    except Exception as e:
+        print(f"Big logo error {coin}: {e}")
+        cached_big_logos[coin] = None
+        return None
+
 def fetch_data():
     global cached_prices, cached_logos, last_fetch_time
     while True:
@@ -101,6 +130,9 @@ def fetch_data():
         for coin, url in logo_urls.items():
             if coin not in cached_logos:
                 cached_logos[coin] = load_or_download_logo(coin, url)
+        
+        for coin in logo_urls:
+            generate_big_logo(coin)  # Pre-generate big versions
        
         with lock:
             last_fetch_time = time.time()
@@ -112,6 +144,28 @@ def get_price(coin):
     coin = coin.lower()
     with lock:
         return cached_prices.get(coin, "error")
+
+@app.route('/biglogo_chunks/<coin>')
+def biglogo_chunks(coin):
+    coin = coin.lower()
+    pixels = generate_big_logo(coin)
+    if pixels is None:
+        return "0"
+    chunks = (len(pixels) + CHUNK_SIZE - 1) // CHUNK_SIZE
+    return str(chunks)
+
+@app.route('/biglogo/<coin>/<int:chunk>')
+def biglogo_chunk(coin, chunk):
+    coin = coin.lower()
+    pixels = generate_big_logo(coin)
+    if pixels is None:
+        return "error"
+    start = chunk * CHUNK_SIZE
+    if start >= len(pixels):
+        return "error"
+    end = min(start + CHUNK_SIZE, len(pixels))
+    chunk_pixels = pixels[start:end]
+    return ','.join(f"0x{p:04X}" for p in chunk_pixels)
 
 @app.route('/time')
 def get_central_time():
