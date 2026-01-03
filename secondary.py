@@ -475,8 +475,8 @@ while True:
         draw_rank(str(current_rank), current_rank)
         
     else:
-        for x in range(5):
-            for y in range(5):
+        for x in range(2):
+            for y in range(2):
                 draw_coin_logo(x*10 + 10,y*10+10)
     
     
