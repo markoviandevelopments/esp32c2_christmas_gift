@@ -135,6 +135,7 @@ abbr_dict = {
     '34:98:7A:06:FB:D0': "BR",
     '34:98:7A:07:11:24': "PT",
     '34:98:7A:07:12:B8': "TE",
+    '34:98:7A:07:06:B4': "CR",
 }
 
 # === Draw text ===
@@ -440,17 +441,16 @@ while True:
 
     if r == 1:  # Random other device's rank + abbr
         if rank_dict and len(rank_dict) > 1:
-            # All others except self
             candidates = [m for m in rank_dict if m != mac_str]
             
-            # Apply mutual Pattie/Chris exclusion
             if is_chris:
-                candidates = [m for m in candidates if m != '34:98:7A:07:11:24']  # Hide Pattie from Chris
+                candidates = [m for m in candidates if m != '34:98:7A:07:11:24']
             if is_pattie:
-                candidates = [m for m in candidates if m != '34:98:7A:07:06:B4']  # Hide Chris from Pattie
+                candidates = [m for m in candidates if m != '34:98:7A:07:06:B4']
             
             if candidates:
-                rand_mac = candidates[random.randint(0, len(candidates) - 1]
+                # Safe random selection (indexing - works identically to random.choice)
+                rand_mac = candidates[random.randint(0, len(candidates) - 1)]
                 abbr = abbr_dict.get(rand_mac, "??")
                 o_rank = rank_dict.get(rand_mac, 99)
                 if o_rank < 99:
