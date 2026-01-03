@@ -434,20 +434,27 @@ while True:
     
     string = "HOWDY Y'ALL"  # Fallback
     r = random.randint(1, 3)
-    is_chris = display_name == "Chris's"
+    # Identify if this device is Chris or Pattie for privacy rules
+    is_chris = mac_str == '34:98:7A:07:06:B4'
     is_pattie = mac_str == '34:98:7A:07:11:24'
 
-    if r == 1:
+    if r == 1:  # Random other device's rank + abbr
         if rank_dict and len(rank_dict) > 1:
-            other_macs = [m for m in rank_dict if m != mac_str]
+            # All others except self
+            candidates = [m for m in rank_dict if m != mac_str]
+            
+            # Apply mutual Pattie/Chris exclusion
             if is_chris:
-                other_macs = [m for m in other_macs if m != '34:98:7A:07:11:24']  # Hide Pattie from Chris
-            # No forbid for Pattie since Chris not ranked
-            if other_macs:
-                rand_mac = random.choice(other_macs)
+                candidates = [m for m in candidates if m != '34:98:7A:07:11:24']  # Hide Pattie from Chris
+            if is_pattie:
+                candidates = [m for m in candidates if m != '34:98:7A:07:06:B4']  # Hide Chris from Pattie
+            
+            if candidates:
+                rand_mac = candidates[random.randint(0, len(candidates) - 1]
                 abbr = abbr_dict.get(rand_mac, "??")
                 o_rank = rank_dict.get(rand_mac, 99)
-                string = f"{abbr} #{o_rank}"
+                if o_rank < 99:
+                    string = f"{abbr} #{o_rank}"
     elif r == 2:
         if random.randint(0, 3):
             string = f"LUK N:{random.randint(0, 99)}"
@@ -455,7 +462,7 @@ while True:
             string = f"LUK N:{67}"
     elif r == 3:
         bucks = int(round(last_value))
-        string = f"~${bucks} TODAY!"
+        string = f"~{bucks} BILLS"
         
     draw_text(8, 62, string)
     
