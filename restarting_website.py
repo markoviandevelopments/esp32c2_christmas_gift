@@ -18,7 +18,7 @@ MAC_INFO = {
     '34:98:7A:07:06:B4': {"name": "Chris's", "coin": "BTC"},
 }
 
-LOG_FILE = "/home/preston/mac_connection_logs.txt"
+LOG_FILE = "mac_connection_logs.txt"
 
 # Global: MAC -> latest datetime
 last_seen = {mac: None for mac in MAC_INFO}
