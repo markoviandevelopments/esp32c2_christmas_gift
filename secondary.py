@@ -521,7 +521,7 @@ while True:
     draw_coin_logo(110, 55)
 
     if random.randint(1,2) > 0:
-        draw_coin_logo(110, 55)
+            draw_big_coin_logo()  # Full-screen every update (covers text/rank—good for splash)
     if current_rank < 99:
         draw_rank(str(current_rank), current_rank)
     # Accurate 60-second delay with idle (WiFi-friendly)
