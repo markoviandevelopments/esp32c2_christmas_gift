@@ -284,11 +284,12 @@ def draw_coin_logo(x, y):
 
 def draw_big_coin_logo():
     try:
-        r = urequests.get(f'{data_proxy_url}/biglogo_chunks/{coin_endpoint}', timeout=15)
+        # Get chunk count
+        r = urequests.get(f'{data_proxy_url}/biglogo_chunks/{coin_endpoint}', timeout=20)
         text = r.text.strip()
         r.close()
-        if text == "error" or text == "0" or not text.isdigit():
-            draw_coin_logo(70, 30)  # Center small fallback
+        if not text.isdigit() or int(text) == 0:
+            draw_coin_logo(70, 30)  # Quick fallback if no big logo
             return
         total_chunks = int(text)
     except:
@@ -298,15 +299,16 @@ def draw_big_coin_logo():
     pixel_idx = 0
     for chunk_id in range(total_chunks):
         try:
-            r = urequests.get(f'{data_proxy_url}/biglogo/{coin_endpoint}/{chunk_id}', timeout=20)  # Longer timeout
+            r = urequests.get(f'{data_proxy_url}/biglogo/{coin_endpoint}/{chunk_id}', timeout=25)
             text = r.text.strip()
             r.close()
-            if text == "error":
-                break
+            if text == "error" or not text:
+                break  # Stop on bad chunk, keep what was drawn
             chunk_pixels = [int(p, 16) for p in text.split(',') if p]
         except:
-            break
+            break  # Network blip - keep partial draw
         
+        # Draw this chunk
         for color in chunk_pixels:
             if pixel_idx >= 12800:
                 break
@@ -317,15 +319,17 @@ def draw_big_coin_logo():
             send_byte(color & 0xFF, 1)
             pixel_idx += 1
         
-        time.sleep_ms(50)  # Small delay between chunks - helps stability
+        time.sleep_ms(80)  # Gentle pause - helps slow connections
     
-    # Only fallback to small if basically nothing drew
-    if pixel_idx < 5000:  # Very low = total fail
+    # Only full fallback if almost nothing drew (total fail)
+    if pixel_idx < 2000:
+        # Clear screen and draw small centered fallback
         set_window(0, 0, 159, 79)
         for _ in range(160 * 80):
             send_byte(0x00, 1)
             send_byte(0x00, 1)
         draw_coin_logo(70, 30)
+    # Otherwise keep the (partial) big logo - looks good even if a chunk missed
 
 # === XRP logo function (unchanged from your version) ===
 def draw_xrp_logo(center_x, center_y, radius):
