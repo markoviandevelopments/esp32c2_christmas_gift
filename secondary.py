@@ -434,50 +434,46 @@ while True:
         send_byte(0x00, 1)
         send_byte(0x00, 1)
 
-    if it_C % 2 == 0:
-        draw_text(8, 4, display_name + " " + coin)
-        draw_text(8, 22, f"{coin}:" + last_price)
-        draw_text(8, 42, f"VAL:${last_value:.2f}")
-        
-        string = "ERROR XD"  # Fallback
-        r = random.randint(1, 2)
-        # Identify if this device is Chris or Pattie for privacy rules
-        is_chris = mac_str == '34:98:7A:07:06:B4'
-        is_pattie = mac_str == '34:98:7A:07:11:24'
+
+    draw_text(8, 4, display_name + " " + coin)
+    draw_text(8, 22, f"{coin}:" + last_price)
+    draw_text(8, 42, f"VAL:${last_value:.2f}")
     
-        if r == 1:  # Random other device's rank + abbr
-            if rank_dict and len(rank_dict) > 1:
-                candidates = [m for m in rank_dict if m != mac_str]
-                
-                if is_chris:
-                    candidates = [m for m in candidates if m != '34:98:7A:07:11:24']
-                if is_pattie:
-                    candidates = [m for m in candidates if m != '34:98:7A:07:06:B4']
-                
-                if candidates:
-                    # Fixed syntax + safe indexing
-                    idx = random.randint(0, len(candidates) - 1)
-                    rand_mac = candidates[idx]
-                    abbr = abbr_dict.get(rand_mac, "??")
-                    o_rank = rank_dict.get(rand_mac, 99)
-                    if o_rank < 99:
-                        string = f"{abbr} AT {o_rank}"
-        elif r == 2:
-            if random.randint(0, 3):
-                string = f"LUK N:{random.randint(0, 99)}"
-            else:
-                string = f"LUK N:{67}"
+    string = "ERROR XD"  # Fallback
+    r = random.randint(1, 2)
+    # Identify if this device is Chris or Pattie for privacy rules
+    is_chris = mac_str == '34:98:7A:07:06:B4'
+    is_pattie = mac_str == '34:98:7A:07:11:24'
+
+    if r == 1:  # Random other device's rank + abbr
+        if rank_dict and len(rank_dict) > 1:
+            candidates = [m for m in rank_dict if m != mac_str]
             
-        draw_text(8, 62, string)
+            if is_chris:
+                candidates = [m for m in candidates if m != '34:98:7A:07:11:24']
+            if is_pattie:
+                candidates = [m for m in candidates if m != '34:98:7A:07:06:B4']
+            
+            if candidates:
+                # Fixed syntax + safe indexing
+                idx = random.randint(0, len(candidates) - 1)
+                rand_mac = candidates[idx]
+                abbr = abbr_dict.get(rand_mac, "??")
+                o_rank = rank_dict.get(rand_mac, 99)
+                if o_rank < 99:
+                    string = f"{abbr} AT {o_rank}"
+    elif r == 2:
+        if random.randint(0, 3):
+            string = f"LUK N:{random.randint(0, 99)}"
+        else:
+            string = f"LUK N:{67}"
         
-        draw_coin_logo(110, 55)
-        if current_rank < 99:
-        draw_rank(str(current_rank), current_rank)
+    draw_text(8, 62, string)
+    
+    draw_coin_logo(110, 55)
+    if current_rank < 99:
+    draw_rank(str(current_rank), current_rank)
         
-    else:
-        for x in range(2):
-            for y in range(2):
-                draw_coin_logo(110, 55)
     
     
     # Accurate 60-second delay with idle (WiFi-friendly)
