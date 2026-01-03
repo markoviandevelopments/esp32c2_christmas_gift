@@ -433,8 +433,6 @@ while True:
     for _ in range(160 * 80):
         send_byte(0x00, 1)
         send_byte(0x00, 1)
-
-
     draw_text(8, 4, display_name + " " + coin)
     draw_text(8, 22, f"{coin}:" + last_price)
     draw_text(8, 42, f"VAL:${last_value:.2f}")
@@ -471,11 +469,9 @@ while True:
     draw_text(8, 62, string)
     
     draw_coin_logo(110, 55)
+    
     if current_rank < 99:
-    draw_rank(str(current_rank), current_rank)
-        
-    
-    
+        draw_rank(str(current_rank), current_rank)
     # Accurate 60-second delay with idle (WiFi-friendly)
     current_time = time.ticks_ms()
     it_C += 1
