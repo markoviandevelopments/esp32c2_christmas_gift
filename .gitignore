@@ -1,0 +1,2 @@
+# Ignore device connection logs (personal/sensitive data)
+mac_connection_logs.txt
