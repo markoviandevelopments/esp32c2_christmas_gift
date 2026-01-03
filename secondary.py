@@ -284,38 +284,31 @@ def draw_coin_logo(x, y):
 
 def draw_big_coin_logo():
     try:
-        # Step 1: Get number of chunks
         r = urequests.get(f'{data_proxy_url}/biglogo_chunks/{coin_endpoint}', timeout=15)
         text = r.text.strip()
         r.close()
-        if text == "error" or text == "0":
-            # Fallback to small centered if no big logo available
-            draw_coin_logo(70, 30)  # Center 20x20 logo approx at screen middle
+        if text == "error" or text == "0" or not text.isdigit():
+            draw_coin_logo(70, 30)  # Center small fallback
             return
         total_chunks = int(text)
     except:
         draw_coin_logo(70, 30)
         return
 
-    pixel_idx = 0  # Tracks position on 160x80 screen
-    success = True
+    pixel_idx = 0
     for chunk_id in range(total_chunks):
         try:
-            r = urequests.get(f'{data_proxy_url}/biglogo/{coin_endpoint}/{chunk_id}', timeout=15)
+            r = urequests.get(f'{data_proxy_url}/biglogo/{coin_endpoint}/{chunk_id}', timeout=20)  # Longer timeout
             text = r.text.strip()
             r.close()
             if text == "error":
-                success = False
                 break
-            # Parse chunk (safe, no full list)
             chunk_pixels = [int(p, 16) for p in text.split(',') if p]
         except:
-            success = False
             break
         
-        # Draw this chunk immediately
         for color in chunk_pixels:
-            if pixel_idx >= 12800:  # Safety
+            if pixel_idx >= 12800:
                 break
             px = pixel_idx % 160
             py = pixel_idx // 160
@@ -323,9 +316,11 @@ def draw_big_coin_logo():
             send_byte(color >> 8, 1)
             send_byte(color & 0xFF, 1)
             pixel_idx += 1
+        
+        time.sleep_ms(50)  # Small delay between chunks - helps stability
     
-    if not success or pixel_idx < 12000:  # If incomplete
-        # Clear and fallback
+    # Only fallback to small if basically nothing drew
+    if pixel_idx < 5000:  # Very low = total fail
         set_window(0, 0, 159, 79)
         for _ in range(160 * 80):
             send_byte(0x00, 1)
