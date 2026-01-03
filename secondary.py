@@ -125,6 +125,18 @@ digit_patterns = {
     '8': [14, 14, 17, 17, 17, 17, 14, 14, 17, 17, 17, 17, 14, 14, 0, 0],
     '9': [14, 14, 17, 17, 17, 17, 15, 15, 1, 1, 2, 2, 12, 12, 0, 0],
 }
+
+last_current_rank = 99
+rank_dict = {}
+abbr_dict = {
+    '34:98:7A:07:13:B4': "SY",
+    '34:98:7A:07:14:D0': "AL",
+    '34:98:7A:06:FC:A0': "PA",
+    '34:98:7A:06:FB:D0': "BR",
+    '34:98:7A:07:11:24': "PT",
+    '34:98:7A:07:12:B8': "TE",
+}
+
 # === Draw text ===
 def draw_text(x_start, y_start, text):
     x = x_start
@@ -378,9 +390,13 @@ def fetch_data():
         r = urequests.get(f'{data_proxy_url}/rank', timeout=10)
         rank_json = ujson.loads(r.text)
         r.close()
-        current_rank = rank_json.get(mac_str, 99)
-    except Exception as e:
-        pass
+        rank_dict = rank_json  # Full dict for phrases
+        new_rank = rank_json.get(mac_str, 99)
+        current_rank = new_rank
+        last_current_rank = new_rank
+    except:
+        current_rank = last_current_rank  # Persist on fail
+        # rank_dict keeps old if possible
 
 
 # Ping server with MAC once
@@ -413,15 +429,31 @@ while True:
     draw_text(8, 4, display_name + " " + coin)
     draw_text(8, 22, f"{coin}:" + last_price)
     draw_text(8, 42, f"VAL:${last_value:.2f}")
-    string = "HOWDY"
-    r1 = random.randint(1,3)
-    if r1 == 1:
-        string = "HOWDY"
-    elif r1 == 2:
-        string = "HELLO"
-    elif r1 == 3:
-        string = "HI THERE"
+    
+    string = "HOWDY Y'ALL"  # Fallback
+    r = random.randint(1, 3)
+    is_chris = display_name == "Chris's"
+    is_pattie = mac_str == '34:98:7A:07:11:24'
+
+    if r == 1:
+        if rank_dict and len(rank_dict) > 1:
+            other_macs = [m for m in rank_dict if m != mac_str]
+            if is_chris:
+                other_macs = [m for m in other_macs if m != '34:98:7A:07:11:24']  # Hide Pattie from Chris
+            # No forbid for Pattie since Chris not ranked
+            if other_macs:
+                rand_mac = random.choice(other_macs)
+                abbr = abbr_dict.get(rand_mac, "??")
+                o_rank = rank_dict.get(rand_mac, 99)
+                string = f"{abbr} #{o_rank}"
+    elif r == 2:
+        string = f"LUCKY N: {random.randint(0, 99)}"
+    elif r == 3:
+        bucks = int(round(last_value))
+        string = f"~${bucks} TODAY!"
+        
     draw_text(8, 62, string)
+    
     draw_coin_logo(110, 55)
     
     if current_rank < 99:
