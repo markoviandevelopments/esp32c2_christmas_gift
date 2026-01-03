@@ -281,6 +281,56 @@ def draw_coin_logo(x, y):
     else:
         # Fallback placeholder circle if no logo
         draw_xrp_logo(x + 10, y + 10, 10)
+
+def draw_big_coin_logo():
+    try:
+        # Step 1: Get number of chunks
+        r = urequests.get(f'{data_proxy_url}/biglogo_chunks/{coin_endpoint}', timeout=15)
+        text = r.text.strip()
+        r.close()
+        if text == "error" or text == "0":
+            # Fallback to small centered if no big logo available
+            draw_coin_logo(70, 30)  # Center 20x20 logo approx at screen middle
+            return
+        total_chunks = int(text)
+    except:
+        draw_coin_logo(70, 30)
+        return
+
+    pixel_idx = 0  # Tracks position on 160x80 screen
+    success = True
+    for chunk_id in range(total_chunks):
+        try:
+            r = urequests.get(f'{data_proxy_url}/biglogo/{coin_endpoint}/{chunk_id}', timeout=15)
+            text = r.text.strip()
+            r.close()
+            if text == "error":
+                success = False
+                break
+            # Parse chunk (safe, no full list)
+            chunk_pixels = [int(p, 16) for p in text.split(',') if p]
+        except:
+            success = False
+            break
+        
+        # Draw this chunk immediately
+        for color in chunk_pixels:
+            if pixel_idx >= 12800:  # Safety
+                break
+            px = pixel_idx % 160
+            py = pixel_idx // 160
+            set_window(px, py, px, py)
+            send_byte(color >> 8, 1)
+            send_byte(color & 0xFF, 1)
+            pixel_idx += 1
+    
+    if not success or pixel_idx < 12000:  # If incomplete
+        # Clear and fallback
+        set_window(0, 0, 159, 79)
+        for _ in range(160 * 80):
+            send_byte(0x00, 1)
+            send_byte(0x00, 1)
+        draw_coin_logo(70, 30)
 # === XRP logo function (unchanged from your version) ===
 def draw_xrp_logo(center_x, center_y, radius):
     # Fill white circle
@@ -469,7 +519,9 @@ while True:
     draw_text(8, 62, string)
     
     draw_coin_logo(110, 55)
-    
+
+    if random.randint(1,2) > 0:
+        draw_coin_logo(110, 55)
     if current_rank < 99:
         draw_rank(str(current_rank), current_rank)
     # Accurate 60-second delay with idle (WiFi-friendly)
