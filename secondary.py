@@ -477,7 +477,7 @@ while True:
     else:
         for x in range(2):
             for y in range(2):
-                draw_coin_logo(x*10 + 10,y*10+10)
+                draw_coin_logo(110, 55)
     
     
     # Accurate 60-second delay with idle (WiFi-friendly)
