@@ -3,7 +3,7 @@ import datetime
 
 HOST = ''  # Listen on all interfaces
 PORT = 9022
-LOG_FILE = "/home/preston/mac_connection_logs.txt"
+LOG_FILE = "mac_connection_logs.txt"
 
 print(f"Server listening on port {PORT}...")
 
