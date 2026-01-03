@@ -137,6 +137,7 @@ def get_logo(coin):
 def get_rank():
     with lock:
         prices = cached_prices.copy()
+    
     values = {}
     for mac, info in HOLDINGS.items():
         coin_key = info['coin']
@@ -147,21 +148,42 @@ def get_rank():
         except:
             values[mac] = 0.0
     
-    # Real ranking (exclude test)
-    real_macs = [m for m in values if m != TEST_MAC]
-    real_sorted = sorted(real_macs, key=lambda m: values[m], reverse=True)
-    real_rank = {mac: idx + 1 for idx, mac in enumerate(real_sorted)}
+    # Helper to assign competition ranks (tied get same rank, next skips)
+    def assign_ranks(mac_list):
+        if not mac_list:
+            return {}
+        # Sort by USD descending
+        sorted_macs = sorted(mac_list, key=lambda m: values[m], reverse=True)
+        rank_dict = {}
+        i = 0
+        while i < len(sorted_macs):
+            current_mac = sorted_macs[i]
+            current_usd = values[current_mac]
+            # Find tie group size
+            tie_end = i + 1
+            while tie_end < len(sorted_macs) and values[sorted_macs[tie_end]] == current_usd:
+                tie_end += 1
+            # Assign the current rank (best in group) to all tied
+            current_rank = i + 1
+            for j in range(i, tie_end):
+                rank_dict[sorted_macs[j]] = current_rank
+            i = tie_end
+        return rank_dict
     
-    # Hypo including test
-    all_sorted = sorted(values.keys(), key=lambda m: values[m], reverse=True)
-    hypo_rank = {mac: idx + 1 for idx, mac in enumerate(all_sorted)}
+    # Real ranking (exclude test)
+    real_macs = [m for m in HOLDINGS if m != TEST_MAC]
+    real_rank = assign_ranks(real_macs)
+    
+    # Hypo ranking (include test)
+    hypo_rank = assign_ranks(list(HOLDINGS.keys()))
     
     response = {}
     for mac in HOLDINGS:
         if mac == TEST_MAC:
-            response[mac] = int(hypo_rank[mac])
+            response[mac] = int(hypo_rank.get(mac, 99))
         else:
             response[mac] = int(real_rank.get(mac, 99))
+    
     return jsonify(response)
 
 @app.route('/')
