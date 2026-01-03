@@ -289,15 +289,15 @@ def draw_big_coin_logo():
     #     send_byte(0x00, 1)
     #     send_byte(0x00, 1)
     for _ in range(160 * 80):
-    # Very dark random color (adjust the upper limits for darker/brighter noise)
-    red   = random.randint(0, 3)   # 0-3   (max 31 for red)
-    green = random.randint(0, 6)   # 0-6   (max 63 for green – slightly higher range OK since eye is more sensitive)
-    blue  = random.randint(0, 3)   # 0-3   (max 31 for blue)
-    
-    color = (red << 11) | (green << 5) | blue
-    
-    send_byte(color >> 8, 1)
-    send_byte(color & 0xFF, 1)
+        # Very dark random color (adjust the upper limits for darker/brighter noise)
+        red   = random.randint(0, 3)   # 0-3   (max 31 for red)
+        green = random.randint(0, 6)   # 0-6   (max 63 for green – slightly higher range OK since eye is more sensitive)
+        blue  = random.randint(0, 3)   # 0-3   (max 31 for blue)
+        
+        color = (red << 11) | (green << 5) | blue
+        
+        send_byte(color >> 8, 1)
+        send_byte(color & 0xFF, 1)
     
     
     total_chunks = 0
