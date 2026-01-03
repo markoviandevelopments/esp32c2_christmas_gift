@@ -128,13 +128,13 @@ digit_patterns = {
 
 
 abbr_dict = {
-    '34:98:7A:07:13:B4': "SY",
-    '34:98:7A:07:14:D0': "AL",
-    '34:98:7A:06:FC:A0': "PA",
-    '34:98:7A:06:FB:D0': "BR",
-    '34:98:7A:07:11:24': "PT",
-    '34:98:7A:07:12:B8': "TE",
-    '34:98:7A:07:06:B4': "CR",
+    '34:98:7A:07:13:B4': "SYD",
+    '34:98:7A:07:14:D0': "ALY",
+    '34:98:7A:06:FC:A0': "MOM",
+    '34:98:7A:06:FB:D0': "BRN",
+    '34:98:7A:07:11:24': "PAT",
+    '34:98:7A:07:12:B8': "TES",
+    '34:98:7A:07:06:B4': "DAD",
 }
 
 last_current_rank = 99
@@ -459,7 +459,7 @@ while True:
                 abbr = abbr_dict.get(rand_mac, "??")
                 o_rank = rank_dict.get(rand_mac, 99)
                 if o_rank < 99:
-                    string = f"{abbr} #{o_rank}"
+                    string = f"{abbr} AT {o_rank}"
     elif r == 2:
         if random.randint(0, 3):
             string = f"LUK N:{random.randint(0, 99)}"
