@@ -447,7 +447,10 @@ while True:
                 o_rank = rank_dict.get(rand_mac, 99)
                 string = f"{abbr} #{o_rank}"
     elif r == 2:
-        string = f"LUK N: {random.randint(0, 99)}"
+        if random.randint(0, 3):
+            string = f"LUK N:{random.randint(0, 99)}"
+        else:
+            string = f"LUK N:{67}"
     elif r == 3:
         bucks = int(round(last_value))
         string = f"~${bucks} TODAY!"
