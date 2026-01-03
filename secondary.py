@@ -438,12 +438,12 @@ while True:
     draw_text(8, 42, f"VAL:${last_value:.2f}")
     
     string = "ERROR XD"  # Fallback
-    r = random.randint(1, 3)
+    r = random.randint(1, 2)
     # Identify if this device is Chris or Pattie for privacy rules
     is_chris = mac_str == '34:98:7A:07:06:B4'
     is_pattie = mac_str == '34:98:7A:07:11:24'
 
-    if 1 == 1:  # Random other device's rank + abbr
+    if r == 1:  # Random other device's rank + abbr
         if rank_dict and len(rank_dict) > 1:
             candidates = [m for m in rank_dict if m != mac_str]
             
@@ -465,9 +465,6 @@ while True:
             string = f"LUK N:{random.randint(0, 99)}"
         else:
             string = f"LUK N:{67}"
-    elif r == 3:
-        bucks = int(round(last_value))
-        string = f"~{bucks} BILLS"
         
     draw_text(8, 62, string)
     
