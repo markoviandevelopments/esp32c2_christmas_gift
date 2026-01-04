@@ -10,7 +10,7 @@ app = Flask(__name__)
 
 # === CONFIGURATION ===
 PHOTOS_DIR = '/home/preston/Desktop/x_mas_gift/circle_display/photos'
-CACHE_DIR = '/home/preston/Desktop/x_mas_gift/circle_display/.cache_photos_64'
+CACHE_DIR = '/home/preston/Desktop/x_mas_gift/circle_display/.cache_photos'
 os.makedirs(CACHE_DIR, exist_ok=True)
 
 # Target size for display (change to 240 for full resolution later)
