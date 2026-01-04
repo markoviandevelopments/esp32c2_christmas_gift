@@ -208,7 +208,11 @@ def draw_text(x_start, y_start, text):
 set_window(0, 0, 239, 239)
 
 # === Main loop ===
+it_C = 0
 while True:
+    if it_C > 0 and it_C % 30 == 0: # Reset device occasionally to pull any possible changes
+        machine.reset()
+        it_C = 0
     clear_display()
     draw_text(60, 110, "Loading...")
     #gc.collect()
@@ -222,3 +226,4 @@ while True:
     current_time = time.ticks_ms()
     while time.ticks_diff(time.ticks_ms(), current_time) < 6000:
         machine.idle()  # Yields to WiFi/tasks - prevents network blockage
+    it_C += 1
