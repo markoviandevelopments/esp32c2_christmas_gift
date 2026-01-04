@@ -80,8 +80,8 @@ def convert_to_rgb565(image_path):
 # Global list of all pre-cached image paths
 cached_paths = []
 
-# Current photo being served (changes on n=0 requests)
-current_raw_path = None
+# Per-client current photo (ip: {'path': str, 'last_access': time})
+client_photos = {}
 
 def preload_all_images():
     """Pre-process and cache ALL photos in the folder"""
@@ -111,13 +111,10 @@ def index():
     <p>Serving {TARGET_SIZE}x{TARGET_SIZE} RGB565 images</p>
     <p>Found {count} photo(s) in folder, {len(cached_paths)} cached</p>
     <p>Use: /pixel?n=0 to /pixel?n={PIXELS_TOTAL//CHUNK_PIXELS - 1}</p>
-    <p>Current serving: {os.path.basename(current_raw_path) if current_raw_path else 'None'}</p>
     """
 
 @app.route('/pixel')
 def serve_pixel_chunk():
-    global current_raw_path
-    
     if not cached_paths:
         preload_all_images()  # In case watcher hasn't caught up
         if not cached_paths:
@@ -136,13 +133,26 @@ def serve_pixel_chunk():
     if n < 0 or n > max_chunk:
         abort(400, f"n out of range (0-{max_chunk})")
     
-    # If this is the start of a new photo pull (n=0), pick a new random photo
-    if n == 0:
-        current_raw_path = random.choice(cached_paths)
-        print(f"New client started - serving random photo: {os.path.basename(current_raw_path)}")
+    # Get client IP
+    client_ip = request.remote_addr
     
-    if current_raw_path is None or not os.path.exists(current_raw_path):
-        abort(500, "No current photo selected")
+    # If this is the start of a new photo pull (n=0), pick a new random photo for this client
+    if n == 0:
+        client_photos[client_ip] = {
+            'path': random.choice(cached_paths),
+            'last_access': time.time()
+        }
+        print(f"New pull started from {client_ip} - serving random photo: {os.path.basename(client_photos[client_ip]['path'])}")
+    
+    # Get the current path for this client
+    client_data = client_photos.get(client_ip)
+    if client_data is None or 'path' not in client_data or not os.path.exists(client_data['path']):
+        abort(500, "No current photo selected for this client - start with n=0")
+    
+    # Update last access time
+    client_data['last_access'] = time.time()
+    
+    current_raw_path = client_data['path']
     
     start_byte = n * CHUNK_PIXELS * 2
     chunk_size = CHUNK_PIXELS * 2
@@ -152,11 +162,11 @@ def serve_pixel_chunk():
             f.seek(start_byte)
             chunk = f.read(chunk_size)
     except Exception as e:
-        print(f"Read error: {e}")
+        print(f"Read error for {client_ip}: {e}")
         abort(500)
     
     if len(chunk) != chunk_size:
-        print(f"Short read: got {len(chunk)}, expected {chunk_size}")
+        print(f"Short read for {client_ip}: got {len(chunk)}, expected {chunk_size}")
         abort(500)
     
     return Response(chunk, mimetype='application/octet-stream')
@@ -170,6 +180,13 @@ def watcher():
             print("Photo folder changed - preloading all images")
             preload_all_images()
             known_files = new_files
+        
+        # Optional: Clean up stale client entries (older than 10 min)
+        now = time.time()
+        to_remove = [ip for ip, data in list(client_photos.items()) if now - data.get('last_access', 0) > 600]
+        for ip in to_remove:
+            del client_photos[ip]
+        
         time.sleep(10)
 
 if __name__ == '__main__':
