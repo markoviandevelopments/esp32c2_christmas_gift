@@ -14,7 +14,7 @@ CACHE_DIR = '/home/preston/Desktop/x_mas_gift/circle_display/.cache_photos_64'
 os.makedirs(CACHE_DIR, exist_ok=True)
 
 # Target size for display (change to 240 for full resolution later)
-TARGET_SIZE = 64
+TARGET_SIZE = 240
 
 # Choose resampling filter:
 # - Image.LANCZOS: smooth, high quality (good for photos)
