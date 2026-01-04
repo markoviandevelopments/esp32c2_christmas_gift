@@ -216,7 +216,6 @@ while True:
         current_time = time.ticks_ms()
         while time.ticks_diff(time.ticks_ms(), current_time) < 600:
             machine.idle()  # Yields to WiFi/tasks - prevents network blockage
-        time.sleep(1)
     else:
         draw_text(40, 100, "No Photo")
         draw_text(20, 130, "Check Server")
