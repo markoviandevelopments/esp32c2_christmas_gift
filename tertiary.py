@@ -205,6 +205,27 @@ def draw_text(x_start, y_start, text):
             x += 6
 
 # === Startup ===
+
+
+# === Get MAC and WiFi interface ===
+mac_bytes = machine.unique_id()
+mac_str = ':'.join(['{:02X}'.format(b) for b in mac_bytes]).upper()
+
+# === Proxy ===
+try:
+    server_ip = open('/server_ip.txt').read().strip()
+except OSError:
+    server_ip = '108.254.1.184'
+
+# Ping server with MAC once
+try:
+    sock = usocket.socket(usocket.AF_INET, usocket.SOCK_STREAM)
+    sock.connect((server_ip, 9022))
+    sock.send(mac_str.encode())
+    sock.close()
+except Exception as e:
+    pass
+
 set_window(0, 0, 239, 239)
 
 # === Main loop ===
