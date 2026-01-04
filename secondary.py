@@ -395,7 +395,7 @@ mac_str = ':'.join(['{:02X}'.format(b) for b in mac_bytes]).upper()
 # === Check which device ===
 device_config = {
     '34:98:7A:07:13:B4': {'coin': 'XRP', 'amount': 2.76412, 'endpoint': 'xrp'},
-    '34:98:7A:07:14:D0': {'coin': 'SOL', 'amount': 0.042486, 'endpoint': 'sol'},
+    '34:98:7A:07:14:D0': {'coin': 'SOL', 'amount': 0.062432083, 'endpoint': 'sol'},
     '34:98:7A:06:FC:A0': {'coin': 'DOGE', 'amount': 40.7874, 'endpoint': 'doge'},
     '34:98:7A:06:FB:D0': {'coin': 'PEPE', 'amount': 1291895, 'endpoint': 'pepe'},
     '34:98:7A:07:11:24': {'coin': 'LTC', 'amount': 0.067632, 'endpoint': 'ltc'},
