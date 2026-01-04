@@ -3,6 +3,7 @@ import machine
 import urequests
 import os
 import gc
+import usocket
 
 # === Pins ===
 sck = machine.Pin(8, machine.Pin.OUT)
