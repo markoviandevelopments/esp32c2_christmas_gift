@@ -16,6 +16,8 @@ MAC_INFO = {
     '34:98:7A:07:11:24': {"name": "Pattie's", "coin": "LTC"},
     '34:98:7A:07:12:B8': {"name": "Test's", "coin": "DOGE (test)"},
     '34:98:7A:07:06:B4': {"name": "Chris's", "coin": "BTC"},
+    '34:98:7A:07:11:7C': {"name": "Second Circle Scren", "coin": "BTC"},
+    
 }
 
 LOG_FILE = "mac_connection_logs.txt"
