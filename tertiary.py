@@ -213,8 +213,13 @@ while True:
         draw_text(60, 100, "Hello!!!")
         draw_text(60, 120, " ")
         draw_text(60, 140, "-Preston & Willoh")
+        current_time = time.ticks_ms()
+        while time.ticks_diff(time.ticks_ms(), current_time) < 600:
+            machine.idle()  # Yields to WiFi/tasks - prevents network blockage
         time.sleep(1)
     else:
         draw_text(40, 100, "No Photo")
         draw_text(20, 130, "Check Server")
-    time.sleep(1)
+    current_time = time.ticks_ms()
+    while time.ticks_diff(time.ticks_ms(), current_time) < 600:
+        machine.idle()  # Yields to WiFi/tasks - prevents network blockage
