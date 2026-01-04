@@ -94,31 +94,31 @@ def set_window(x0, y0, x1, y1):
     send_command(0x2B, bytes([0, y0, 0, y1]))
     send_command(0x2C)
 
-# === Pixel-by-pixel update (16 pixels per request) ===
+# === Pixel-by-pixel update (256 pixels per request) ===
 SRC_SIZE = 64
 SCALE = 3
 TOTAL_PIXELS = SRC_SIZE * SRC_SIZE
-CHUNKS = TOTAL_PIXELS // 16  # 256 chunks
+CHUNKS = TOTAL_PIXELS // 256   # 16 chunks for 64x64
 
 def update_photo():
     try:
         server_ip = open('/server_ip.txt').read().strip()
     except OSError:
-        server_ip = '192.168.1.198'
-    
+        server_ip = '192.168.1.198'  # or whatever your desktop's LAN IP is
+   
     base_url = f'http://{server_ip}:9025'
-    
+   
     offset_x = (240 - SRC_SIZE * SCALE) // 2
     offset_y = (240 - SRC_SIZE * SCALE) // 2
-    
+   
     pixel_index = 0
-    for chunk_n in range(CHUNKS):
+    for chunk_n in range(CHUNKS):  # now 0 to 15 only
         try:
             url = f"{base_url}/pixel?n={chunk_n}"
             r = urequests.get(url, timeout=15)
-            if r.status_code == 200 and len(r.content) == 32:
+            if r.status_code == 200 and len(r.content) == 512:  # ← 256 pixels × 2 bytes
                 data = r.content
-                for i in range(0, 32, 2):
+                for i in range(0, 512, 2):
                     high = data[i]
                     low = data[i + 1]
                     sx = pixel_index % SRC_SIZE
