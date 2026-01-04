@@ -13,7 +13,7 @@ PHOTOS_DIR = '/home/preston/Desktop/x_mas_gift/circle_display/photos'
 CACHE_DIR = '/home/preston/Desktop/x_mas_gift/circle_display/.cache_photos'
 os.makedirs(CACHE_DIR, exist_ok=True)
 
-# Target size for display (change to 240 for full resolution later)
+# Target size for display (240 for full resolution)
 TARGET_SIZE = 240
 
 # Choose resampling filter:
@@ -21,7 +21,7 @@ TARGET_SIZE = 240
 # - Image.NEAREST: sharp pixels (good for pixel art, memes, text)
 RESAMPLE_FILTER = Image.LANCZOS
 
-CHUNK_PIXELS = 256  
+CHUNK_PIXELS = 256
 PIXELS_TOTAL = TARGET_SIZE * TARGET_SIZE
 
 def get_image_files():
@@ -77,23 +77,30 @@ def convert_to_rgb565(image_path):
         print(f"Failed to process {image_path}: {e}")
         raise
 
-# Current cached image
+# Global list of all pre-cached image paths
+cached_paths = []
+
+# Current photo being served (changes on n=0 requests)
 current_raw_path = None
 
-def load_random_image():
-    global current_raw_path
+def preload_all_images():
+    """Pre-process and cache ALL photos in the folder"""
+    global cached_paths
     images = get_image_files()
     if not images:
         print("No images found in photos directory!")
-        current_raw_path = None
+        cached_paths = []
         return
     
-    chosen = random.choice(images)
-    print(f"Loading new random photo: {os.path.basename(chosen)}")
-    current_raw_path = convert_to_rgb565(chosen)
+    cached_paths = []
+    for img_path in images:
+        cached_path = convert_to_rgb565(img_path)
+        cached_paths.append(cached_path)
+    
+    print(f"Preloaded {len(cached_paths)} images.")
 
-# Initial load
-load_random_image()
+# Initial preload
+preload_all_images()
 
 @app.route('/')
 def index():
@@ -102,18 +109,18 @@ def index():
     return f"""
     <h2>GC9A01 Photo Server Ready</h2>
     <p>Serving {TARGET_SIZE}x{TARGET_SIZE} RGB565 images</p>
-    <p>Found {count} photo(s) in folder</p>
+    <p>Found {count} photo(s) in folder, {len(cached_paths)} cached</p>
     <p>Use: /pixel?n=0 to /pixel?n={PIXELS_TOTAL//CHUNK_PIXELS - 1}</p>
-    <p>Current cached: {os.path.basename(current_raw_path) if current_raw_path else 'None'}</p>
+    <p>Current serving: {os.path.basename(current_raw_path) if current_raw_path else 'None'}</p>
     """
 
 @app.route('/pixel')
 def serve_pixel_chunk():
     global current_raw_path
     
-    if current_raw_path is None or not os.path.exists(current_raw_path):
-        load_random_image()
-        if current_raw_path is None:
+    if not cached_paths:
+        preload_all_images()  # In case watcher hasn't caught up
+        if not cached_paths:
             abort(503, "No photos available")
     
     n_str = request.args.get('n')
@@ -128,6 +135,14 @@ def serve_pixel_chunk():
     max_chunk = PIXELS_TOTAL // CHUNK_PIXELS - 1
     if n < 0 or n > max_chunk:
         abort(400, f"n out of range (0-{max_chunk})")
+    
+    # If this is the start of a new photo pull (n=0), pick a new random photo
+    if n == 0:
+        current_raw_path = random.choice(cached_paths)
+        print(f"New client started - serving random photo: {os.path.basename(current_raw_path)}")
+    
+    if current_raw_path is None or not os.path.exists(current_raw_path):
+        abort(500, "No current photo selected")
     
     start_byte = n * CHUNK_PIXELS * 2
     chunk_size = CHUNK_PIXELS * 2
@@ -148,18 +163,13 @@ def serve_pixel_chunk():
 
 # Background watcher - reloads cache when photos change
 def watcher():
-    known_mtimes = {}
+    known_files = set(get_image_files())
     while True:
-        images = get_image_files()
-        changed = False
-        for path in images:
-            mtime = os.path.getmtime(path)
-            if path not in known_mtimes or known_mtimes[path] != mtime:
-                changed = True
-                known_mtimes[path] = mtime
-        if changed:
-            print("Photo folder changed - reloading random image")
-            load_random_image()
+        new_files = set(get_image_files())
+        if new_files != known_files:
+            print("Photo folder changed - preloading all images")
+            preload_all_images()
+            known_files = new_files
         time.sleep(10)
 
 if __name__ == '__main__':
