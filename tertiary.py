@@ -94,6 +94,12 @@ def set_window(x0, y0, x1, y1):
     send_command(0x2B, bytes([0, y0, 0, y1]))
     send_command(0x2C)
 
+def clear_display():
+    set_window(0, 0, 239, 239)
+    for _ in range(240 * 240):
+        send_byte(0x00, 1)  # high byte black
+        send_byte(0x00, 1)  # low byte black
+
 # === Pixel-by-pixel update (256 pixels per request) ===
 SRC_SIZE = 240
 SCALE = 1
@@ -200,14 +206,11 @@ def draw_text(x_start, y_start, text):
 
 # === Startup ===
 set_window(0, 0, 239, 239)
-for _ in range(240 * 240):
-    send_byte(0x00, 1)
-    send_byte(0x00, 1)
-
-draw_text(60, 110, "Loading...")
 
 # === Main loop ===
 while True:
+    clear_display()
+    draw_text(60, 110, "Loading...")
     #gc.collect()
     if update_photo():
         draw_text(60, 100, "HALOCHEN!!!")
