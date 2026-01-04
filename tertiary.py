@@ -95,7 +95,7 @@ def set_window(x0, y0, x1, y1):
     send_command(0x2C)
 
 # === Pixel-by-pixel update (256 pixels per request) ===
-SRC_SIZE = 64
+SRC_SIZE = 240
 SCALE = 3
 TOTAL_PIXELS = SRC_SIZE * SRC_SIZE
 CHUNKS = TOTAL_PIXELS // 256   # 16 chunks for 64x64
