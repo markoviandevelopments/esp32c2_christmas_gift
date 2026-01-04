@@ -111,43 +111,43 @@ while running:
 
     pixel_index = 0
     for chunk_n in range(CHUNKS):
-    try:
-        url = f"{base_url}/pixel?n={chunk_n}"
-        # Add headers to prevent gzip compression
-        headers = {'Accept-Encoding': 'identity'}
-        r = requests.get(url, timeout=10, headers=headers)
-        
-        if r.status_code == 200:
-            data = r.content
-            expected_len = 32
-            if len(data) != expected_len:
-                print(f"Warning: chunk {chunk_n} got {len(data)} bytes (expected {expected_len}). Padding with zeros.")
-                data += b'\x00' * (expected_len - len(data))  # Pad short chunks (common for black areas)
+        try:
+            url = f"{base_url}/pixel?n={chunk_n}"
+            # Add headers to prevent gzip compression
+            headers = {'Accept-Encoding': 'identity'}
+            r = requests.get(url, timeout=10, headers=headers)
             
-            for i in range(0, len(data), 2):
-                if i + 1 >= len(data):
-                    break  # Safety if odd length
-                high = data[i]
-                low = data[i + 1]
-                color = rgb565_to_rgb(high, low)
-
-                sx = pixel_index % SRC_SIZE
-                sy = pixel_index // SRC_SIZE
-                x = offset_x + sx * SCALE
-                y = offset_y + sy * SCALE
-
-                pygame.draw.rect(screen, color, (x, y, SCALE, SCALE))
-
-                pixel_index += 1
-        else:
-            print(f"Bad status for chunk {chunk_n}: {r.status_code}")
+            if r.status_code == 200:
+                data = r.content
+                expected_len = 32
+                if len(data) != expected_len:
+                    print(f"Warning: chunk {chunk_n} got {len(data)} bytes (expected {expected_len}). Padding with zeros.")
+                    data += b'\x00' * (expected_len - len(data))  # Pad short chunks (common for black areas)
+                
+                for i in range(0, len(data), 2):
+                    if i + 1 >= len(data):
+                        break  # Safety if odd length
+                    high = data[i]
+                    low = data[i + 1]
+                    color = rgb565_to_rgb(high, low)
+    
+                    sx = pixel_index % SRC_SIZE
+                    sy = pixel_index // SRC_SIZE
+                    x = offset_x + sx * SCALE
+                    y = offset_y + sy * SCALE
+    
+                    pygame.draw.rect(screen, color, (x, y, SCALE, SCALE))
+    
+                    pixel_index += 1
+            else:
+                print(f"Bad status for chunk {chunk_n}: {r.status_code}")
+                success = False
+                break
+        except Exception as e:
+            print(f"Error fetching chunk {chunk_n}: {e}")
             success = False
+            # Optional: break here or continue trying next chunks
             break
-    except Exception as e:
-        print(f"Error fetching chunk {chunk_n}: {e}")
-        success = False
-        # Optional: break here or continue trying next chunks
-        break
     last_success = success
 
     if success:
