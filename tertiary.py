@@ -96,9 +96,9 @@ def set_window(x0, y0, x1, y1):
 
 # === Pixel-by-pixel update (256 pixels per request) ===
 SRC_SIZE = 240
-SCALE = 3
+SCALE = 1
 TOTAL_PIXELS = SRC_SIZE * SRC_SIZE
-CHUNKS = TOTAL_PIXELS // 256   # 16 chunks for 64x64
+CHUNKS = TOTAL_PIXELS // 256
 
 def update_photo():
     try:
