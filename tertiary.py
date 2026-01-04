@@ -210,15 +210,15 @@ draw_text(60, 110, "Loading...")
 while True:
     #gc.collect()
     if update_photo():
-        draw_text(60, 100, "Hello!!!")
+        draw_text(60, 100, "HALOCHEN!!!")
         draw_text(60, 120, " ")
-        draw_text(60, 140, "-Preston & Willoh")
+        draw_text(60, 140, "-PRESTON AND WILLOH")
         current_time = time.ticks_ms()
         while time.ticks_diff(time.ticks_ms(), current_time) < 600:
             machine.idle()  # Yields to WiFi/tasks - prevents network blockage
     else:
-        draw_text(40, 100, "No Photo")
-        draw_text(20, 130, "Check Server")
+        draw_text(40, 100, "NO PHOTO")
+        draw_text(20, 130, "CHECK SERVER")
     current_time = time.ticks_ms()
     while time.ticks_diff(time.ticks_ms(), current_time) < 600:
         machine.idle()  # Yields to WiFi/tasks - prevents network blockage
