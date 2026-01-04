@@ -214,7 +214,7 @@ while True:
         machine.reset()
         it_C = 0
     clear_display()
-    draw_text(80, 110, "Loading...")
+    draw_text(80, 110, "LOADING...")
     #gc.collect()
     if update_photo():
         draw_text(80, 100, "HALOCHEN!!!")
