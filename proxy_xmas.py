@@ -32,7 +32,7 @@ lock = threading.Lock()
 # Hard-coded holdings
 HOLDINGS = {
     '34:98:7A:07:13:B4': {'coin': 'xrp', 'amount': 2.76412},
-    '34:98:7A:07:14:D0': {'coin': 'sol', 'amount': 0.042486},
+    '34:98:7A:07:14:D0': {'coin': 'sol', 'amount': 0.062432083},
     '34:98:7A:06:FC:A0': {'coin': 'doge', 'amount': 40.7874},
     '34:98:7A:06:FB:D0': {'coin': 'pepe', 'amount': 1291895},
     '34:98:7A:07:11:24': {'coin': 'ltc', 'amount': 0.067632},
