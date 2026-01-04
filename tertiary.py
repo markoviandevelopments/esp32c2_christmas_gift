@@ -214,12 +214,12 @@ while True:
         machine.reset()
         it_C = 0
     clear_display()
-    draw_text(60, 110, "Loading...")
+    draw_text(80, 110, "Loading...")
     #gc.collect()
     if update_photo():
-        draw_text(60, 100, "HALOCHEN!!!")
-        draw_text(60, 120, " ")
-        draw_text(60, 140, "-PRESTON AND WILLOH")
+        draw_text(80, 100, "HALOCHEN!!!")
+        draw_text(80, 120, " ")
+        draw_text(80, 140, "-PRESTON AND WILLOH")
     else:
         draw_text(40, 100, "NO PHOTO")
         draw_text(20, 130, "CHECK SERVER")
