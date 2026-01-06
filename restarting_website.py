@@ -30,35 +30,47 @@ lock = threading.Lock()
 def parse_log():
     global last_seen
     temp_seen = {mac: None for mac in MAC_INFO}
-    
+
     if not os.path.exists(LOG_FILE):
         print(f"[{datetime.now()}] Log file not found")
         return
-    
+
     try:
         with open(LOG_FILE, 'r') as f:
             for line in f:
                 line = line.strip()
                 if not line:
                     continue
+
+                # Split by ' | ' → expect 4 parts now
                 parts = line.split(' | ')
-                if len(parts) != 3:
-                    continue
-                ts_str, ip_port, mac = parts
-                mac = mac.upper()
+                if len(parts) != 4:
+                    continue  # Skip malformed lines
+
+                ts_str, ip_port, mac, device_name = parts
+                mac = mac.strip().upper()  # Normalize MAC
+
                 if mac in temp_seen:
                     try:
                         timestamp = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
-                        temp_seen[mac] = timestamp
+                        # Only update if this timestamp is newer than what we have
+                        if temp_seen[mac] is None or timestamp > temp_seen[mac]:
+                            temp_seen[mac] = timestamp
                     except ValueError:
-                        pass  # Bad timestamp, skip
-        
+                        pass  # Bad timestamp format, skip this line
+
+        # Thread-safe update of the global last_seen
         with lock:
-            last_seen.update(temp_seen)
-        print(f"[{datetime.now()}] Log parsed successfully")
-    
+            for mac, ts in temp_seen.items():
+                if ts is not None:
+                    if last_seen[mac] is None or ts > last_seen[mac]:
+                        last_seen[mac] = ts
+
+        print(f"[{datetime.now()}] Log parsed successfully – updated {sum(1 for v in temp_seen.values() if v is not None)} devices")
+
     except Exception as e:
         print(f"[{datetime.now()}] Parse error: {e}")
+        
 
 def background_refresh():
     while True:
