@@ -86,7 +86,6 @@ send_command(0x11)
 time.sleep_ms(120)
 send_command(0x29)
 time.sleep_ms(20)
-
 send_command(0x36, b'\x48')  # Fix text direction
 
 # === Window ===
@@ -111,19 +110,19 @@ def update_photo():
     try:
         server_ip = open('/server_ip.txt').read().strip()
     except OSError:
-        server_ip = '192.168.1.198'  # or whatever your desktop's LAN IP is
-   
+        server_ip = '192.168.1.198'  # fallback LAN IP
+
     base_url = f'http://{server_ip}:9025'
-   
+
     offset_x = (240 - SRC_SIZE * SCALE) // 2
     offset_y = (240 - SRC_SIZE * SCALE) // 2
-   
+
     pixel_index = 0
-    for chunk_n in range(CHUNKS):  # now 0 to 15 only
+    for chunk_n in range(CHUNKS):
         try:
             url = f"{base_url}/pixel?n={chunk_n}"
             r = urequests.get(url, timeout=15)
-            if r.status_code == 200 and len(r.content) == 512:  # ← 256 pixels × 2 bytes
+            if r.status_code == 200 and len(r.content) == 512:
                 data = r.content
                 for i in range(0, 512, 2):
                     high = data[i]
@@ -146,7 +145,8 @@ def update_photo():
             print("Chunk error:", e)
             return False
     return pixel_index == TOTAL_PIXELS
-# === Font and text (from your working code) ===
+
+# === Font and text ===
 font = {
     ' ': [0x00,0x00,0x00,0x00,0x00],
     '0': [0x7C,0xA2,0x92,0x8A,0x7C],
@@ -205,39 +205,36 @@ def draw_text(x_start, y_start, text):
                         send_byte(0xFF, 1)
             x += 6
 
-# === Startup ===
-
-
-# === Get MAC and WiFi interface ===
+# === Startup: Send MAC to server ===
 mac_bytes = machine.unique_id()
 mac_str = ':'.join(['{:02X}'.format(b) for b in mac_bytes]).upper()
 
-# === Proxy ===
 try:
     server_ip = open('/server_ip.txt').read().strip()
 except OSError:
-    server_ip = '108.254.1.184'
+    server_ip = '192.168.1.198'  # fallback
 
-# Ping server with MAC once
 try:
     sock = usocket.socket(usocket.AF_INET, usocket.SOCK_STREAM)
+    sock.settimeout(5)
     sock.connect((server_ip, 9022))
     sock.send(mac_str.encode())
     sock.close()
 except Exception as e:
-    pass
+    pass  # silently ignore if cannot reach server
 
 set_window(0, 0, 239, 239)
 
 # === Main loop ===
 it_C = 0
 while True:
-    if it_C > 0 and it_C % 30 == 0: # Reset device occasionally to pull any possible changes
+    if it_C > 0 and it_C % 30 == 0:
         machine.reset()
         it_C = 0
+
     clear_display()
     draw_text(90, 110, "LOADING...")
-    #gc.collect()
+
     if update_photo():
         draw_text(80, 100, "HALOCHEN!!!")
         draw_text(80, 120, " ")
@@ -245,7 +242,9 @@ while True:
     else:
         draw_text(40, 100, "NO PHOTO")
         draw_text(20, 130, "CHECK SERVER")
+
     current_time = time.ticks_ms()
     while time.ticks_diff(time.ticks_ms(), current_time) < 6000:
-        machine.idle()  # Yields to WiFi/tasks - prevents network blockage
+        machine.idle()
+
     it_C += 1
