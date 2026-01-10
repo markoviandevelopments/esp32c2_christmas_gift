@@ -9,7 +9,7 @@ import socket
 app = Flask(__name__)
 
 # === CONFIGURATION ===
-BASE_DIR = '/home/preston/Desktop/x_mas_gift/circle_display'
+BASE_DIR = '/home/preston/Desktop/circle_displays'
 PHOTOS_DIR_1 = os.path.join(BASE_DIR, 'photos', 'circle_display_1')
 PHOTOS_DIR_2 = os.path.join(BASE_DIR, 'photos', 'circle_display_2')
 CACHE_DIR = os.path.join(BASE_DIR, '.cache_photos')
