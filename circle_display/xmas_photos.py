@@ -11,7 +11,7 @@ app = Flask(__name__)
 # === CONFIGURATION ===
 BASE_DIR = '/home/preston/Desktop/circle_displays'
 PHOTOS_DIR_1 = os.path.join(BASE_DIR, 'photos', 'circle_display_1')
-PHOTOS_DIR_2 = os.path.join(BASE_DIR, 'photos', 'circle_display_2')
+PHOTOS_DIR_2 = os.path.join(BASE_DIR, 'photos', 'circle_display_1') #orig 2
 CACHE_DIR = os.path.join(BASE_DIR, '.cache_photos')
 os.makedirs(CACHE_DIR, exist_ok=True)
 os.makedirs(PHOTOS_DIR_1, exist_ok=True)
