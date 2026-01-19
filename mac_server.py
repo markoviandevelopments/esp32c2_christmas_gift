@@ -17,6 +17,8 @@ KNOWN_DEVICES = {
     '34:98:7A:07:06:B4': "Chris's device",
     '34:98:7A:07:11:7C': "Second Circle Screen",
     '34:98:7A:06:FD:74': "First Circle Screen",
+    '34:98:7A:07:13:40': "Third Circle Screen",
+    '34:98:7A:07:09:68': "Fourth Circle Screen",
 }
 
 print(f"Server listening on port {PORT}...")
