@@ -18,6 +18,8 @@ MAC_INFO = {
     '34:98:7A:07:06:B4': {"name": "Chris's", "coin": "BTC"},
     '34:98:7A:07:11:7C': {"name": "Second Circle Screen", "coin": "N/A"},
     '34:98:7A:06:FD:74': {"name": "First Circle Screen", "coin": "N/A"},
+    '34:98:7A:07:13:40': {"name": "Third Circle Screen", "coin": "N/A"},
+    '34:98:7A:07:09:68': {"name": "Fourth Circle Screen", "coin": "N/A"},
     
 }
 
