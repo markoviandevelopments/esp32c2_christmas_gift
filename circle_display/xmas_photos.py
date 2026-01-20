@@ -251,6 +251,17 @@ if __name__ == '__main__':
     print("Starting GC9A01 circle display photo server...")
 
     preload_all()
+    
+    # ── TEMP DEBUG ───────────────────────────────────────────────
+    print("\n=== CACHE STATUS DEBUG ===")
+    for k, lst in cached_photos.items():
+        print(f"{k:12} : {len(lst):3d} files")
+        if lst:
+            print("   First file:", os.path.basename(lst[0]))
+        else:
+            print("   → EMPTY ← this causes 503!")
+    print("===========================\n")
+    # ─────────────────────────────────────────────────────────────
 
     threading.Thread(target=mac_listener, daemon=True).start()
     threading.Thread(target=maintenance_watcher, daemon=True).start()
