@@ -197,34 +197,46 @@ def mac_listener():
             ip = addr[0]
             print(f"[{time.strftime('%H:%M:%S')}] Connection accepted from {ip}")
 
-            # Read all available data with timeout
             client.settimeout(5.0)
             raw_data = b''
             try:
                 while True:
-                    chunk = client.recv(512)  # large enough chunk
+                    chunk = client.recv(512)
                     if not chunk:
                         break
                     raw_data += chunk
             except socket.timeout:
-                print(f"  → Timeout while reading from {ip} (partial data possible)")
-            except Exception as recv_err:
-                print(f"  → Recv error from {ip}: {recv_err}")
+                pass
 
-            # ALWAYS print the raw bytes no matter what
             if raw_data:
                 print(f"  RAW BYTES RECEIVED from {ip} (len={len(raw_data)}): {raw_data!r}")
-                # Also show as hex for easier debugging
                 hex_dump = ' '.join(f'{b:02X}' for b in raw_data)
                 print(f"  HEX: {hex_dump}")
-                # Try to show as string if it looks printable
+
                 try:
-                    text = raw_data.decode('ascii', errors='replace').rstrip('\r\n\x00')
-                    print(f"  As text (replace bad chars): '{text}'")
-                except:
-                    print("  → Could not decode as ASCII at all")
+                    text = raw_data.decode('ascii', errors='ignore').strip().upper()
+                    print(f"  Decoded: '{text}'")
+
+                    if len(text) >= 17:
+                        mac = text[:17]
+                        print(f"  Extracted MAC: '{mac}'")
+
+                        if mac.count(':') == 5 and all(c in '0123456789ABCDEF:' for c in mac):
+                            display = MAC_TO_DISPLAY.get(mac, "display_4")
+                            print(f"  Mapped '{mac}' → {display}")
+
+                            with mapping_lock:
+                                ip_to_display[ip] = display
+                                print(f"  SUCCESS - Stored mapping: {ip} → {display}")
+                        else:
+                            print("  Invalid MAC format - ignored")
+                    else:
+                        print("  Data too short - ignored")
+                except Exception as decode_err:
+                    print(f"  Decode failed: {decode_err}")
+
             else:
-                print(f"  → ZERO bytes received from {ip} (empty connection)")
+                print("  No data received - empty connection")
 
             client.close()
 
