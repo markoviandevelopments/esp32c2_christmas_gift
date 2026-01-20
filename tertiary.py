@@ -221,7 +221,7 @@ while True:
     draw_text(90, 110, "LOADING...")
 
     if update_photo():
-        draw_text(80, 100, "HALOCHEN!!!")
+        draw_text(80, 100, "ENJOY!!!")
         draw_text(80, 120, " ")
         draw_text(80, 140, "-PRESTON AND WILLOH")
     else:
