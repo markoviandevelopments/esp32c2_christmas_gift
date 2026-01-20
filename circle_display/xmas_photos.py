@@ -10,8 +10,8 @@ app = Flask(__name__)
 # === CONFIGURATION ===
 BASE_DIR = '/home/preston/Desktop/x_mas_gift/circle_display'
 PHOTO_DIRS = {
-    "screen1": os.path.join(BASE_DIR, 'photos', 'circle_display_2'),  # First Circle Screen - Pattie
-    "screen2": os.path.join(BASE_DIR, 'photos', 'circle_display_1'),  # Second Circle Screen - Melanie
+    "screen1": os.path.join(BASE_DIR, 'photos', 'circle_display_1'),  # First Circle Screen - Pattie
+    "screen2": os.path.join(BASE_DIR, 'photos', 'circle_display_2'),  # Second Circle Screen - Melanie
     "screen3": os.path.join(BASE_DIR, 'photos', 'circle_display_3'),  # Third Circle Screen - Robbins
     "screen4": os.path.join(BASE_DIR, 'photos', 'circle_display_4'),  # Fourth Circle Screen - Preston and Willoh
 }
