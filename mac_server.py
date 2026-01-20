@@ -3,7 +3,7 @@ import socket
 import datetime
 
 HOST = ''  # Listen on all interfaces
-PORT = 9022
+PORT = 9029
 LOG_FILE = "mac_connection_logs.txt"
 
 # Known MAC addresses and friendly names (add/remove as needed)
