@@ -46,7 +46,7 @@ MAC_TO_DISPLAY = {
     "34:98:7A:07:11:7C": "display_1",   # Melanie
     "34:98:7A:06:FD:74": "display_2",   # Pattie
     "34:98:7A:07:13:40": "display_3",   # Robbins
-    # anything else → display_4 (Home/default)
+    "34:98:7A:07:09:68": "display_4",   # Home
 }
 
 # ================= HELPERS =================
@@ -65,24 +65,25 @@ def convert_to_rgb565(image_path, display_key):
     cache_path = os.path.join(CACHE_DIR, cache_name)
 
     if os.path.exists(cache_path) and os.path.getmtime(image_path) <= os.path.getmtime(cache_path):
+        print(f"  Using existing cache: {base_name}")
         return cache_path
 
-    print(f"Converting {display_key:10} : {base_name} → {TARGET_SIZE}x{TARGET_SIZE} RGB565...")
+    print(f"  Converting: {base_name} ({display_key})")
 
     try:
         with Image.open(image_path) as img:
-            if img.mode != 'RGB':
-                img = img.convert('RGB')
-
-            img.thumbnail((TARGET_SIZE, TARGET_SIZE), RESAMPLE_FILTER)
+            print(f"    Original mode: {img.mode}, size: {img.size}")
+            img = img.convert('RGB')           # Force RGB every time - more reliable
+            img.thumbnail((TARGET_SIZE, TARGET_SIZE), Image.LANCZOS)
+            print(f"    After thumbnail: {img.size}")
 
             background = Image.new('RGB', (TARGET_SIZE, TARGET_SIZE), (0, 0, 0))
             offset = ((TARGET_SIZE - img.size[0]) // 2, (TARGET_SIZE - img.size[1]) // 2)
             background.paste(img, offset)
 
+            # Create RGB565 bytes
             pixels = background.load()
             raw_bytes = bytearray()
-
             for y in range(TARGET_SIZE):
                 for x in range(TARGET_SIZE):
                     r, g, b = pixels[x, y]
@@ -92,10 +93,11 @@ def convert_to_rgb565(image_path, display_key):
             with open(cache_path, 'wb') as f:
                 f.write(raw_bytes)
 
+            print(f"    Success → {cache_path}")
             return cache_path
 
     except Exception as e:
-        print(f"Failed to process {image_path}: {e}")
+        print(f"    FAILED: {type(e).__name__}: {e}")
         return None
 
 
@@ -139,6 +141,7 @@ def preload_all():
     for k, v in cached_photos.items():
         print(f"  {k:12} : {len(v)} photos")
     print("="*70 + "\n")
+
 # ================= ROUTES =================
 @app.route('/')
 def index():
@@ -220,55 +223,66 @@ def serve_pixel_chunk():
 def mac_listener():
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.bind(('0.0.0.0', 9022))
-    sock.listen(5)
-    print("MAC registration listener started on :9022")
+    try:
+        sock.bind(('0.0.0.0', 9022))
+        sock.listen(5)
+        print("MAC registration listener started on :9022")
+    except Exception as e:
+        print(f"Failed to start MAC listener: {e}")
+        return
 
     while True:
         try:
             client, addr = sock.accept()
             ip = addr[0]
-            print(f"[{time.strftime('%H:%M:%S')}] Connection from {ip}")
-        
-            raw = client.recv(128)  # big buffer to catch weirdness
-            if not raw:
-                print(f"  → Empty receive from {ip}")
+            print(f"[{time.strftime('%H:%M:%S')}] MAC connection from {ip}")
+
+            data = b''
+            while True:
+                chunk = client.recv(64)
+                if not chunk:
+                    break
+                data += chunk
+
+            if not data:
+                print(f"  → No data received from {ip}")
                 client.close()
                 continue
-        
-            print(f"  Raw bytes: {raw!r}")
+
+            print(f"  Raw bytes from {ip}: {data!r} (len={len(data)})")
+
             try:
-                text = raw.decode('ascii', errors='ignore').strip().upper()
-                print(f"  Decoded + stripped: '{text}' (length: {len(text)})")
-            except:
-                print("  → Decode failed completely")
+                text = data.decode('ascii', errors='ignore').strip().upper()
+                print(f"  Decoded text: '{text}' (len={len(text)})")
+            except Exception as de:
+                print(f"  Decode error: {de}")
                 client.close()
                 continue
-        
+
             if len(text) < 17:
-                print(f"  → Too short (<17 chars), ignoring")
+                print(f"  → Data too short, ignoring")
                 client.close()
                 continue
-        
+
             mac = text[:17]
-            print(f"  Extracted first 17 chars as MAC: '{mac}'")
-        
-            if ':' not in mac or len(mac) != 17:
-                print(f"  → Doesn't look like a MAC (missing : or wrong length)")
+            print(f"  Extracted MAC: '{mac}'")
+
+            if mac.count(':') != 5 or not all(c in '0123456789ABCDEF:' for c in mac):
+                print(f"  → Invalid MAC format, ignoring")
                 client.close()
                 continue
-        
+
             display = MAC_TO_DISPLAY.get(mac, "display_4")
-            print(f"  Lookup result: {mac} → {display}")
-        
+            print(f"  Mapped {mac} to {display}")
+
             with mapping_lock:
                 ip_to_display[ip] = display
-                print(f"  SUCCESS - Stored: {ip} → {display}")
-        
+                print(f"  Registered {ip} → {display}")
+
             client.close()
-        
+
         except Exception as e:
-            print(f"Listener exception from {ip}: {type(e).__name__}: {e}")
+            print(f"MAC listener error: {type(e).__name__}: {e}")
 
 
 # ================= Background maintenance =================
@@ -307,7 +321,7 @@ if __name__ == '__main__':
     print("Starting GC9A01 circle display photo server...")
 
     preload_all()
-    
+
     # ── TEMP DEBUG ───────────────────────────────────────────────
     print("\n=== CACHE STATUS DEBUG ===")
     for k, lst in cached_photos.items():
