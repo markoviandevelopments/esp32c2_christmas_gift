@@ -150,6 +150,7 @@ def serve_pixel_chunk():
     # Decide which photo set to use
     with mapping_lock:
         display_key = ip_to_display.get(client_ip, "display_4") # default = home
+    print(f"[{time.strftime('%H:%M:%S')}] Serving chunk {n} for {client_ip} → {display_key}")
     photos = cached_photos[display_key]
     if not photos:
         abort(503, f"No cached photos available for {display_key}")
@@ -190,56 +191,46 @@ def mac_listener():
     except Exception as e:
         print(f"Failed to start MAC listener: {e}")
         return
-
     while True:
         try:
             client, addr = sock.accept()
             ip = addr[0]
-            print(f"[{time.strftime('%H:%M:%S')}] Connection accepted from {ip}")
-
-            client.settimeout(5.0)
-            raw_data = b''
-            try:
-                while True:
-                    chunk = client.recv(512)
-                    if not chunk:
-                        break
-                    raw_data += chunk
-            except socket.timeout:
-                pass
-
-            if raw_data:
-                print(f"  RAW BYTES RECEIVED from {ip} (len={len(raw_data)}): {raw_data!r}")
-                hex_dump = ' '.join(f'{b:02X}' for b in raw_data)
-                print(f"  HEX: {hex_dump}")
-
-                try:
-                    text = raw_data.decode('ascii', errors='ignore').strip().upper()
-                    print(f"  Decoded: '{text}'")
-
-                    if len(text) >= 17:
-                        mac = text[:17]
-                        print(f"  Extracted MAC: '{mac}'")
-
-                        if mac.count(':') == 5 and all(c in '0123456789ABCDEF:' for c in mac):
-                            display = MAC_TO_DISPLAY.get(mac, "display_4")
-                            print(f"  Mapped '{mac}' → {display}")
-
-                            with mapping_lock:
-                                ip_to_display[ip] = display
-                                print(f"  SUCCESS - Stored mapping: {ip} → {display}")
-                        else:
-                            print("  Invalid MAC format - ignored")
-                    else:
-                        print("  Data too short - ignored")
-                except Exception as decode_err:
-                    print(f"  Decode failed: {decode_err}")
-
-            else:
-                print("  No data received - empty connection")
-
+            print(f"[{time.strftime('%H:%M:%S')} ] MAC connection from {ip}")
+            data = b''
+            while True:
+                chunk = client.recv(128)
+                if not chunk:
+                    break
+                data += chunk
             client.close()
-
+            if not data:
+                print(f" → No data received from {ip}")
+                continue
+            print(f" Raw bytes from {ip}: {data!r} (len={len(data)})")
+            try:
+                text = data.decode('ascii', errors='ignore').strip().upper()
+                print(f" Decoded text: '{text}' (len={len(text)})")
+            except Exception as de:
+                print(f" Decode error: {de}")
+                continue
+            match = re.search(r'([0-9A-F]{2}:){5}[0-9A-F]{2}', text)
+            if match:
+                mac = match.group(0).upper()
+                print(f" Received and extracted MAC: '{mac}'")
+                display = MAC_TO_DISPLAY.get(mac)
+                if display is None:
+                    display = "display_4"
+                    print(f" Unknown MAC '{mac}', defaulting to {display}")
+                else:
+                    print(f" Mapped received MAC '{mac}' to {display}")
+                with mapping_lock:
+                    if ip in ip_to_display:
+                        old_display = ip_to_display[ip]
+                        print(f" Warning: Overwriting mapping for {ip} from {old_display} to {display}")
+                    ip_to_display[ip] = display
+                    print(f" Registered {ip} → {display}")
+            else:
+                print(f" → Invalid MAC format in '{text}'")
         except Exception as e:
             print(f"MAC listener error: {type(e).__name__}: {e}")
 # ================= Background maintenance =================
