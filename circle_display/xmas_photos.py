@@ -43,8 +43,8 @@ mapping_lock = threading.Lock()
 ip_to_display = {}  # ip → 'display_1' / 'display_2' / ...
 
 MAC_TO_DISPLAY = {
-    "34:98:7A:07:11:7C": "display_1",   # Melanie
-    "34:98:7A:06:FD:74": "display_2",   # Pattie
+    "34:98:7A:06:FD:74": "display_1",   # Melanie
+    "34:98:7A:07:11:7C": "display_2",   # Pattie
     "34:98:7A:07:13:40": "display_3",   # Robbins
     "34:98:7A:07:09:68": "display_4",   # Home
 }
