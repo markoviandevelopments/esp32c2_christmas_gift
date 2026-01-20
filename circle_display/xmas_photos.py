@@ -1,278 +1,176 @@
-from flask import Flask, send_file, abort, Response, request
+from flask import Flask, abort, Response, request
 import os
 import random
 from PIL import Image
 import threading
 import time
 import socket
-import re
+
 app = Flask(__name__)
-# ================= CONFIGURATION =================
-BASE_DIR = '/home/preston/Desktop/x_mas_gift/circle_display'
+
+# === CONFIGURATION ===
+BASE_DIR = '/home/preston/Desktop/x_mas_gift/circle_displays'
 PHOTO_DIRS = {
-    'display_1': os.path.join(BASE_DIR, 'photos', 'circle_display_1'), # Melanie
-    'display_2': os.path.join(BASE_DIR, 'photos', 'circle_display_2'), # Pattie
-    'display_3': os.path.join(BASE_DIR, 'photos', 'circle_display_3'), # Robbins
-    'display_4': os.path.join(BASE_DIR, 'photos', 'circle_display_4'), # Home/Default
+    "screen1": os.path.join(BASE_DIR, 'photos', 'circle_display_2'),  # First Circle Screen - Pattie
+    "screen2": os.path.join(BASE_DIR, 'photos', 'circle_display_1'),  # Second Circle Screen - Melanie
+    "screen3": os.path.join(BASE_DIR, 'photos', 'circle_display_3'),  # Third Circle Screen - Robbins
+    "screen4": os.path.join(BASE_DIR, 'photos', 'circle_display_4'),  # Fourth Circle Screen - Preston and Willoh
 }
-CACHE_DIR = os.path.join(BASE_DIR, '.cache_photos')
-os.makedirs(CACHE_DIR, exist_ok=True)
-for d in PHOTO_DIRS.values():
-    os.makedirs(d, exist_ok=True)
 TARGET_SIZE = 240
 RESAMPLE_FILTER = Image.LANCZOS
 CHUNK_PIXELS = 256
-BYTES_PER_PIXEL = 2
 PIXELS_TOTAL = TARGET_SIZE * TARGET_SIZE
-BYTES_TOTAL = PIXELS_TOTAL * BYTES_PER_PIXEL
-CHUNKS_COUNT = PIXELS_TOTAL // CHUNK_PIXELS
-# Global caches: list of ready .raw file paths for each display
-cached_photos = {key: [] for key in PHOTO_DIRS}
-# Current photo per client (ip → {'path': str, 'last_access': float})
+BYTES_PER_PIXEL = 2
+CHUNK_SIZE = CHUNK_PIXELS * BYTES_PER_PIXEL
+
+# Thread-safe mapping: client IP → which photo directory to use
+client_mac_lock = threading.Lock()
+client_ip_to_dirkey = {}  # ip → "screen1" / "screen2" / "screen3" / "screen4"
+
+# Per-client current photo (ip → {'path': str, 'last_access': float})
 client_current_photo = {}
-# IP → target display key mapping (protected by lock)
-mapping_lock = threading.Lock()
-ip_to_display = {} # ip → 'display_1' / 'display_2' / ...
-MAC_TO_DISPLAY = {
-    "34:98:7A:07:11:7C": "display_1", # Melanie
-    "34:98:7A:06:FD:74": "display_2", # Pattie
-    "34:98:7A:07:13:40": "display_3", # Robbins
-    "34:98:7A:07:09:68": "display_4", # Home
-}
-# ================= HELPERS =================
+
 def get_image_files(directory):
-    supported = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.webp', '.tiff', '.ico'}
-    return [
-        os.path.join(directory, f) for f in os.listdir(directory)
-        if os.path.isfile(os.path.join(directory, f))
-        and os.path.splitext(f.lower())[1] in supported
-    ]
-def convert_to_rgb565(image_path, display_key):
-    base_name = os.path.basename(image_path)
-    cache_name = f"{display_key}_{base_name}.{TARGET_SIZE}x{TARGET_SIZE}.raw"
-    cache_path = os.path.join(CACHE_DIR, cache_name)
-    if os.path.exists(cache_path) and os.path.getmtime(image_path) <= os.path.getmtime(cache_path):
-        print(f" Using existing cache: {base_name}")
-        return cache_path
-    print(f" Converting: {base_name} ({display_key})")
+    supported = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.webp'}
+    try:
+        return [
+            os.path.join(directory, f)
+            for f in os.listdir(directory)
+            if os.path.isfile(os.path.join(directory, f))
+            and os.path.splitext(f.lower())[1] in supported
+        ]
+    except Exception:
+        return []
+
+def image_to_rgb565_bytes(image_path):
+    """Convert image → 240×240 centered RGB565 raw bytes (on the fly)"""
     try:
         with Image.open(image_path) as img:
-            print(f" Original mode: {img.mode}, size: {img.size}")
-            img = img.convert('RGB') # Force RGB every time - more reliable
-            img.thumbnail((TARGET_SIZE, TARGET_SIZE, Image.LANCZOS))
-            print(f" After thumbnail: {img.size}")
+            if img.mode != 'RGB':
+                img = img.convert('RGB')
+            img.thumbnail((TARGET_SIZE, TARGET_SIZE), RESAMPLE_FILTER)
             background = Image.new('RGB', (TARGET_SIZE, TARGET_SIZE), (0, 0, 0))
             offset = ((TARGET_SIZE - img.size[0]) // 2, (TARGET_SIZE - img.size[1]) // 2)
             background.paste(img, offset)
-            # Create RGB565 bytes
             pixels = background.load()
-            raw_bytes = bytearray()
+            raw = bytearray()
             for y in range(TARGET_SIZE):
                 for x in range(TARGET_SIZE):
                     r, g, b = pixels[x, y]
+                    # RGB565: 5 red, 6 green, 5 blue
                     rgb565 = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
-                    raw_bytes.extend([rgb565 >> 8, rgb565 & 0xFF])
-            with open(cache_path, 'wb') as f:
-                f.write(raw_bytes)
-            print(f" Success → {cache_path}")
-            return cache_path
+                    raw.extend([rgb565 >> 8, rgb565 & 0xFF])
+            return bytes(raw)
     except Exception as e:
-        print(f" FAILED: {type(e).__name__}: {e}")
+        print(f"Failed to process {image_path}: {e}")
         return None
-def preload_all():
-    global cached_photos
-    print("\n" + "="*70)
-    print("STARTING PRELOAD - CURRENT WORKING DIR:", os.getcwd())
-    print("BASE_DIR:", BASE_DIR)
-   
-    for key, directory in PHOTO_DIRS.items():
-        print(f"\nProcessing display: {key}")
-        print(" Expected folder: {directory}")
-       
-        if not os.path.isdir(directory):
-            print(" → FOLDER DOES NOT EXIST! Skipping.")
-            continue
-           
-        files = get_image_files(directory)
-        print(f" Found {len(files)} image files")
-       
-        if not files:
-            print(" → No supported images found!")
-            continue
-           
-        print(" First few files:")
-        for f in files[:3]:
-            print(" ", os.path.basename(f))
-           
-        processed = []
-        for p in files:
-            result = convert_to_rgb565(p, key)
-            if result:
-                processed.append(result)
-            else:
-                print(" Failed →", os.path.basename(p))
-               
-        cached_photos[key] = processed
-        print(f" → Successfully cached: {len(processed)} / {len(files)}")
-   
-    print("\nFINAL CACHE STATUS:")
-    for k, v in cached_photos.items():
-        print(f" {k:12} : {len(v)} photos")
-    print("="*70 + "\n")
-# ================= ROUTES =================
+
 @app.route('/')
 def index():
-    counts = {k: len(v) for k, v in cached_photos.items()}
+    counts = {}
+    for key, path in PHOTO_DIRS.items():
+        files = get_image_files(path)
+        counts[key] = len(files)
     return f"""
-    <h2>GC9A01 Circle Display Photo Server</h2>
-    <p>Serving {TARGET_SIZE}×{TARGET_SIZE} RGB565 images (chunks of {CHUNK_PIXELS} pixels)</p>
-    <p>Photos per display:</p>
-    <ul>
-        <li>display_1 (Melanie) : {counts['display_1']} photos</li>
-        <li>display_2 (Pattie) : {counts['display_2']} photos</li>
-        <li>display_3 (Robbins) : {counts['display_3']} photos</li>
-        <li>display_4 (Home) : {counts['display_4']} photos</li>
-    </ul>
-    <p>Use: <code>/pixel?n=0</code> … <code>/pixel?n={CHUNKS_COUNT-1}</code></p>
+        <h2>GC9A01 RGB565 Photo Server (No Cache)</h2>
+        <p>Serving 240×240 images, RGB565, converted on-the-fly</p>
+        <ul>
+            <li>First Circle Screen (Pattie): {counts.get('screen1', 0)} photos</li>
+            <li>Second Circle Screen (Melanie): {counts.get('screen2', 0)} photos</li>
+            <li>Third Circle Screen (Robbins): {counts.get('screen3', 0)} photos</li>
+            <li>Fourth Circle Screen (Preston and Willoh): {counts.get('screen4', 0)} photos</li>
+        </ul>
+        <p>Use: <code>/pixel?n=0</code> ... <code>/pixel?n={PIXELS_TOTAL//CHUNK_PIXELS - 1}</code></p>
     """
+
 @app.route('/pixel')
 def serve_pixel_chunk():
     n_str = request.args.get('n')
     if n_str is None:
-        abort(400, "Missing parameter 'n'")
+        abort(400, "Missing 'n' parameter")
     try:
         n = int(n_str)
     except ValueError:
-        abort(400, "'n' must be integer")
-    if not 0 <= n < CHUNKS_COUNT:
-        abort(400, f"n must be between 0 and {CHUNKS_COUNT-1} inclusive")
+        abort(400, "Invalid n")
+    max_chunk = (PIXELS_TOTAL // CHUNK_PIXELS) - 1
+    if n < 0 or n > max_chunk:
+        abort(400, f"n out of range (0-{max_chunk})")
     client_ip = request.remote_addr
-    # Decide which photo set to use
-    with mapping_lock:
-        display_key = ip_to_display.get(client_ip, "display_4") # default = home
-    print(f"[{time.strftime('%H:%M:%S')}] Serving chunk {n} for {client_ip} → {display_key}")
-    photos = cached_photos[display_key]
-    if not photos:
-        abort(503, f"No cached photos available for {display_key}")
-    # Choose new random photo only on first chunk (n==0)
+    # Decide which photo folder this client should use
+    with client_mac_lock:
+        dir_key = client_ip_to_dirkey.get(client_ip, "screen4")  # default = fourth (home)
+    photo_dir = PHOTO_DIRS.get(dir_key)
+    if not photo_dir:
+        abort(500, "Invalid display configuration")
+    image_files = get_image_files(photo_dir)
+    if not image_files:
+        abort(503, f"No photos found in {dir_key}")
+    # Choose new photo only on first chunk (n==0)
     if n == 0:
-        chosen = random.choice(photos)
+        chosen_path = random.choice(image_files)
         client_current_photo[client_ip] = {
-            'path': chosen,
+            'raw_bytes': image_to_rgb565_bytes(chosen_path),
             'last_access': time.time(),
-            'display': display_key
+            'path': chosen_path  # just for logging
         }
-        print(f"New session {client_ip} → {display_key} : {os.path.basename(chosen)}")
+        short_name = os.path.basename(chosen_path)
+        print(f"[{client_ip}] → {dir_key} : {short_name}")
     client_data = client_current_photo.get(client_ip)
-    if not client_data:
-        abort(400, "Must start with n=0")
+    if not client_data or client_data.get('raw_bytes') is None:
+        abort(500, "Start with n=0 or image conversion failed")
     client_data['last_access'] = time.time()
-    current_path = client_data['path']
-    start = n * CHUNK_PIXELS * BYTES_PER_PIXEL
-    size = CHUNK_PIXELS * BYTES_PER_PIXEL
-    try:
-        with open(current_path, 'rb') as f:
-            f.seek(start)
-            chunk = f.read(size)
-    except Exception as e:
-        print(f"Read error {client_ip} {os.path.basename(current_path)}: {e}")
-        abort(500)
-    if len(chunk) != size:
-        abort(500, "Incomplete chunk read")
+    raw_bytes = client_data['raw_bytes']
+    start = n * CHUNK_SIZE
+    chunk = raw_bytes[start : start + CHUNK_SIZE]
+    if not chunk:
+        abort(500, "Chunk read error")
     return Response(chunk, mimetype='application/octet-stream')
-# ================= MAC registration server =================
+
 def mac_listener():
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    try:
-        sock.bind(('0.0.0.0', 9022))
-        sock.listen(5)
-        print("MAC registration listener started on :9022")
-    except Exception as e:
-        print(f"Failed to start MAC listener: {e}")
-        return
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server.bind(('0.0.0.0', 9022))
+    server.listen(5)
+    print("MAC registration listener started on port 9022")
+    mac_to_key = {
+        "34:98:7A:07:11:7C": "screen2",  # Second Circle Screen - Melanie's circle screen
+        "34:98:7A:06:FD:74": "screen1",  # First Circle Screen - Pattie's circle screen
+        "34:98:7A:07:13:40": "screen3",  # Third Circle Screen - Robbins' circle screen
+        "34:98:7A:07:09:68": "screen4",  # Fourth Circle Screen - Preston and Willoh's circle
+    }
     while True:
         try:
-            client, addr = sock.accept()
-            ip = addr[0]
-            print(f"[{time.strftime('%H:%M:%S')} ] MAC connection from {ip}")
-            data = b''
-            while True:
-                chunk = client.recv(128)
-                if not chunk:
-                    break
-                data += chunk
-            client.close()
-            if not data:
-                print(f" → No data received from {ip}")
-                continue
-            print(f" Raw bytes from {ip}: {data!r} (len={len(data)})")
-            try:
-                text = data.decode('ascii', errors='ignore').strip().upper()
-                print(f" Decoded text: '{text}' (len={len(text)})")
-            except Exception as de:
-                print(f" Decode error: {de}")
-                continue
-            match = re.search(r'([0-9A-F]{2}:){5}[0-9A-F]{2}', text)
-            if match:
-                mac = match.group(0).upper()
-                print(f" Received and extracted MAC: '{mac}'")
-                display = MAC_TO_DISPLAY.get(mac)
-                if display is None:
-                    display = "display_4"
-                    print(f" Unknown MAC '{mac}', defaulting to {display}")
+            conn, addr = server.accept()
+            client_ip = addr[0]
+            data = conn.recv(32).decode('utf-8', errors='ignore').strip().upper()
+            if data and len(data) >= 17:
+                mac = data[:17]  # take first 17 chars (XX:XX:XX:XX:XX:XX)
+                dir_key = mac_to_key.get(mac)
+                if dir_key:
+                    with client_mac_lock:
+                        client_ip_to_dirkey[client_ip] = dir_key
+                    print(f"Registered {client_ip} → {dir_key} (MAC: {mac})")
                 else:
-                    print(f" Mapped received MAC '{mac}' to {display}")
-                with mapping_lock:
-                    if ip in ip_to_display:
-                        old_display = ip_to_display[ip]
-                        print(f" Warning: Overwriting mapping for {ip} from {old_display} to {display}")
-                    ip_to_display[ip] = display
-                    print(f" Registered {ip} → {display}")
-            else:
-                print(f" → Invalid MAC format in '{text}'")
+                    print(f"Unknown MAC from {client_ip}: {mac}")
+            conn.close()
         except Exception as e:
-            print(f"MAC listener error: {type(e).__name__}: {e}")
-# ================= Background maintenance =================
-def maintenance_watcher():
-    last_known = {k: set(get_image_files(d)) for k, d in PHOTO_DIRS.items()}
+            print(f"MAC listener error: {e}")
+
+def cleanup_old_clients():
     while True:
-        time.sleep(12)
-        # Check for new/deleted photos
-        changed = False
-        for key, dir_path in PHOTO_DIRS.items():
-            current = set(get_image_files(dir_path))
-            if current != last_known[key]:
-                changed = True
-                last_known[key] = current
-        if changed:
-            print("Detected photo folder change → reloading cache")
-            preload_all()
-        # Cleanup old sessions
         now = time.time()
         to_remove = [
             ip for ip, data in list(client_current_photo.items())
-            if now - data.get('last_access', 0) > 600 # 10 minutes
+            if now - data.get('last_access', 0) > 600  # 10 minutes
         ]
         for ip in to_remove:
             client_current_photo.pop(ip, None)
-            with mapping_lock:
-                ip_to_display.pop(ip, None)
-# ================= STARTUP =================
+            with client_mac_lock:
+                client_ip_to_dirkey.pop(ip, None)
+        time.sleep(30)
+
 if __name__ == '__main__':
-    print("Starting GC9A01 circle display photo server...")
-    preload_all()
-    # ── TEMP DEBUG ───────────────────────────────────────────────
-    print("\n=== CACHE STATUS DEBUG ===")
-    for k, lst in cached_photos.items():
-        print(f"{k:12} : {len(lst):3d} files")
-        if lst:
-            print(" First file:", os.path.basename(lst[0]))
-        else:
-            print(" → EMPTY ← this causes 503!")
-    print("===========================\n")
-    # ─────────────────────────────────────────────────────────────
     threading.Thread(target=mac_listener, daemon=True).start()
-    threading.Thread(target=maintenance_watcher, daemon=True).start()
-    print("Photo server ready on port 9025")
+    threading.Thread(target=cleanup_old_clients, daemon=True).start()
+    print("Starting GC9A01 photo server (no cache, on-the-fly RGB565 conversion)...")
     app.run(host='0.0.0.0', port=9025, debug=False)
