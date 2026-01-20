@@ -228,20 +228,26 @@ def mac_listener():
         try:
             client, addr = sock.accept()
             ip = addr[0]
-            data = client.recv(32).decode('ascii', errors='ignore').strip().upper()
-            client.close()
-
-            if len(data) < 17:
+            raw_data = client.recv(64)  # bigger buffer to catch extras
+            data_str = raw_data.decode('ascii', errors='ignore').strip().upper()
+            print(f"RAW from {ip}: bytes={raw_data!r} → string='{data_str}' (len={len(data_str)})")
+            
+            if len(data_str) < 17:
+                print(f"  → Too short, ignoring")
+                client.close()
                 continue
-
-            mac = data[:17]  # take first possible MAC
+                
+            mac = data_str[:17]
+            print(f"  Extracted MAC: '{mac}'")
+            
             display = MAC_TO_DISPLAY.get(mac, "display_4")
-
+            print(f"  Mapped to: {display}")
+            
             with mapping_lock:
                 ip_to_display[ip] = display
-
-            print(f"Registered {ip} ← MAC {mac} → {display}")
-
+                print(f"  Stored mapping: {ip} → {display}")
+                
+            client.close()
         except Exception as e:
             print(f"MAC listener error: {e}")
 
