@@ -74,7 +74,7 @@ def convert_to_rgb565(image_path, display_key):
         with Image.open(image_path) as img:
             print(f"    Original mode: {img.mode}, size: {img.size}")
             img = img.convert('RGB')           # Force RGB every time - more reliable
-            img.thumbnail((TARGET_SIZE, TARGET_SIZE), Image.LANCZOS)
+            img.thumbnail((TARGET_SIZE, TARGET_SIZE, Image.LANCZOS))
             print(f"    After thumbnail: {img.size}")
 
             background = Image.new('RGB', (TARGET_SIZE, TARGET_SIZE), (0, 0, 0))
@@ -109,7 +109,7 @@ def preload_all():
     
     for key, directory in PHOTO_DIRS.items():
         print(f"\nProcessing display: {key}")
-        print("  Expected folder:", directory)
+        print("  Expected folder: {directory}")
         
         if not os.path.isdir(directory):
             print("  → FOLDER DOES NOT EXIST! Skipping.")
@@ -236,7 +236,7 @@ def mac_listener():
             client, addr = sock.accept()
             client.settimeout(5)  # timeout for recv
             ip = addr[0]
-            print(f"[{time.strftime('%H:%M:%S')}] MAC connection from {ip}")
+            print(f"[{time.strftime('%H:%M:%S')} ] MAC connection from {ip}")
 
             data = b''
             while True:
