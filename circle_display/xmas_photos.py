@@ -43,8 +43,8 @@ mapping_lock = threading.Lock()
 ip_to_display = {}  # ip → 'display_1' / 'display_2' / ...
 
 MAC_TO_DISPLAY = {
-    "34:98:7A:06:FD:74": "display_1",   # Melanie
-    "34:98:7A:07:11:7C": "display_2",   # Pattie
+    "34:98:7A:07:11:7C": "display_1",   # Melanie
+    "34:98:7A:06:FD:74": "display_2",   # Pattie
     "34:98:7A:07:13:40": "display_3",   # Robbins
     "34:98:7A:07:09:68": "display_4",   # Home
 }
@@ -265,7 +265,7 @@ def mac_listener():
                 continue
 
             mac = text[:17]
-            print(f"  Extracted MAC: '{mac}'")
+            print(f"  Received and extracted MAC: '{mac}'")  # Explicit print as requested
 
             if mac.count(':') != 5 or not all(c in '0123456789ABCDEF:' for c in mac):
                 print(f"  → Invalid MAC format, ignoring")
@@ -273,7 +273,7 @@ def mac_listener():
                 continue
 
             display = MAC_TO_DISPLAY.get(mac, "display_4")
-            print(f"  Mapped {mac} to {display}")
+            print(f"  Mapped received MAC '{mac}' to {display}")
 
             with mapping_lock:
                 ip_to_display[ip] = display
