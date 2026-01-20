@@ -3,7 +3,6 @@ import machine
 import urequests
 import os
 import gc
-import usocket
 
 # === Pins ===
 sck = machine.Pin(8, machine.Pin.OUT)
@@ -106,6 +105,10 @@ SCALE = 1
 TOTAL_PIXELS = SRC_SIZE * SRC_SIZE
 CHUNKS = TOTAL_PIXELS // 256
 
+# Get MAC once
+mac_bytes = machine.unique_id()
+mac_str = ':'.join(['{:02X}'.format(b) for b in mac_bytes]).upper()
+
 def update_photo():
     try:
         server_ip = open('/server_ip.txt').read().strip()
@@ -120,7 +123,7 @@ def update_photo():
     pixel_index = 0
     for chunk_n in range(CHUNKS):
         try:
-            url = f"{base_url}/pixel?n={chunk_n}"
+            url = f"{base_url}/pixel?n={chunk_n}&mac={mac_str}"
             r = urequests.get(url, timeout=15)
             if r.status_code == 200 and len(r.content) == 512:
                 data = r.content
@@ -204,24 +207,6 @@ def draw_text(x_start, y_start, text):
                         send_byte(0xFF, 1)
                         send_byte(0xFF, 1)
             x += 6
-
-# === Startup: Send MAC to server ===
-mac_bytes = machine.unique_id()
-mac_str = ':'.join(['{:02X}'.format(b) for b in mac_bytes]).upper()
-
-try:
-    server_ip = open('/server_ip.txt').read().strip()
-except OSError:
-    server_ip = '192.168.1.198'  # fallback
-
-try:
-    sock = usocket.socket(usocket.AF_INET, usocket.SOCK_STREAM)
-    sock.settimeout(5)
-    sock.connect((server_ip, 9022))
-    sock.send(mac_str.encode())
-    sock.close()
-except Exception as e:
-    pass  # silently ignore if cannot reach server
 
 set_window(0, 0, 239, 239)
 
