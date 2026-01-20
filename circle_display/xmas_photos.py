@@ -190,39 +190,44 @@ def mac_listener():
     except Exception as e:
         print(f"Failed to start MAC listener: {e}")
         return
+
     while True:
         try:
             client, addr = sock.accept()
             ip = addr[0]
-            print(f"[{time.strftime('%H:%M:%S')} ] MAC connection from {ip}")
-            data = b''
-            while True:
-                chunk = client.recv(128)
-                if not chunk:
-                    break
-                data += chunk
-            client.close()
-            if not data:
-                print(f" → No data received from {ip}")
-                continue
-            print(f" Raw bytes from {ip}: {data!r} (len={len(data)})")
+            print(f"[{time.strftime('%H:%M:%S')}] Connection accepted from {ip}")
+
+            # Read all available data with timeout
+            client.settimeout(5.0)
+            raw_data = b''
             try:
-                text = data.decode('ascii', errors='ignore').strip().upper()
-                print(f" Decoded text: '{text}' (len={len(text)})")
-            except Exception as de:
-                print(f" Decode error: {de}")
-                continue
-            match = re.search(r'([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}', text, re.I)
-            if match:
-                mac = match.group(0).upper()
-                print(f" Received and extracted MAC: '{mac}'")
-                display = MAC_TO_DISPLAY.get(mac, "display_4")
-                print(f" Mapped received MAC '{mac}' to {display}")
-                with mapping_lock:
-                    ip_to_display[ip] = display
-                    print(f" Registered {ip} → {display}")
+                while True:
+                    chunk = client.recv(512)  # large enough chunk
+                    if not chunk:
+                        break
+                    raw_data += chunk
+            except socket.timeout:
+                print(f"  → Timeout while reading from {ip} (partial data possible)")
+            except Exception as recv_err:
+                print(f"  → Recv error from {ip}: {recv_err}")
+
+            # ALWAYS print the raw bytes no matter what
+            if raw_data:
+                print(f"  RAW BYTES RECEIVED from {ip} (len={len(raw_data)}): {raw_data!r}")
+                # Also show as hex for easier debugging
+                hex_dump = ' '.join(f'{b:02X}' for b in raw_data)
+                print(f"  HEX: {hex_dump}")
+                # Try to show as string if it looks printable
+                try:
+                    text = raw_data.decode('ascii', errors='replace').rstrip('\r\n\x00')
+                    print(f"  As text (replace bad chars): '{text}'")
+                except:
+                    print("  → Could not decode as ASCII at all")
             else:
-                print(f" → Invalid MAC format in '{text}'")
+                print(f"  → ZERO bytes received from {ip} (empty connection)")
+
+            client.close()
+
         except Exception as e:
             print(f"MAC listener error: {type(e).__name__}: {e}")
 # ================= Background maintenance =================
