@@ -101,13 +101,44 @@ def convert_to_rgb565(image_path, display_key):
 
 def preload_all():
     global cached_photos
+    print("\n" + "="*70)
+    print("STARTING PRELOAD - CURRENT WORKING DIR:", os.getcwd())
+    print("BASE_DIR:", BASE_DIR)
+    
     for key, directory in PHOTO_DIRS.items():
+        print(f"\nProcessing display: {key}")
+        print("  Expected folder:", directory)
+        
+        if not os.path.isdir(directory):
+            print("  → FOLDER DOES NOT EXIST! Skipping.")
+            continue
+            
         files = get_image_files(directory)
-        processed = [convert_to_rgb565(p, key) for p in files]
-        cached_photos[key] = [p for p in processed if p is not None]  # filter failed ones
-        print(f"{key:10} → {len(cached_photos[key]):3d} photos cached")
-
-
+        print(f"  Found {len(files)} image files")
+        
+        if not files:
+            print("  → No supported images found!")
+            continue
+            
+        print("  First few files:")
+        for f in files[:3]:
+            print("     ", os.path.basename(f))
+            
+        processed = []
+        for p in files:
+            result = convert_to_rgb565(p, key)
+            if result:
+                processed.append(result)
+            else:
+                print("     Failed →", os.path.basename(p))
+                
+        cached_photos[key] = processed
+        print(f"  → Successfully cached: {len(processed)} / {len(files)}")
+    
+    print("\nFINAL CACHE STATUS:")
+    for k, v in cached_photos.items():
+        print(f"  {k:12} : {len(v)} photos")
+    print("="*70 + "\n")
 # ================= ROUTES =================
 @app.route('/')
 def index():
