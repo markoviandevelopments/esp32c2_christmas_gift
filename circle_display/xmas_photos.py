@@ -228,28 +228,47 @@ def mac_listener():
         try:
             client, addr = sock.accept()
             ip = addr[0]
-            raw_data = client.recv(64)  # bigger buffer to catch extras
-            data_str = raw_data.decode('ascii', errors='ignore').strip().upper()
-            print(f"RAW from {ip}: bytes={raw_data!r} → string='{data_str}' (len={len(data_str)})")
-            
-            if len(data_str) < 17:
-                print(f"  → Too short, ignoring")
+            print(f"[{time.strftime('%H:%M:%S')}] Connection from {ip}")
+        
+            raw = client.recv(128)  # big buffer to catch weirdness
+            if not raw:
+                print(f"  → Empty receive from {ip}")
                 client.close()
                 continue
-                
-            mac = data_str[:17]
-            print(f"  Extracted MAC: '{mac}'")
-            
+        
+            print(f"  Raw bytes: {raw!r}")
+            try:
+                text = raw.decode('ascii', errors='ignore').strip().upper()
+                print(f"  Decoded + stripped: '{text}' (length: {len(text)})")
+            except:
+                print("  → Decode failed completely")
+                client.close()
+                continue
+        
+            if len(text) < 17:
+                print(f"  → Too short (<17 chars), ignoring")
+                client.close()
+                continue
+        
+            mac = text[:17]
+            print(f"  Extracted first 17 chars as MAC: '{mac}'")
+        
+            if ':' not in mac or len(mac) != 17:
+                print(f"  → Doesn't look like a MAC (missing : or wrong length)")
+                client.close()
+                continue
+        
             display = MAC_TO_DISPLAY.get(mac, "display_4")
-            print(f"  Mapped to: {display}")
-            
+            print(f"  Lookup result: {mac} → {display}")
+        
             with mapping_lock:
                 ip_to_display[ip] = display
-                print(f"  Stored mapping: {ip} → {display}")
-                
+                print(f"  SUCCESS - Stored: {ip} → {display}")
+        
             client.close()
+        
         except Exception as e:
-            print(f"MAC listener error: {e}")
+            print(f"Listener exception from {ip}: {type(e).__name__}: {e}")
 
 
 # ================= Background maintenance =================
