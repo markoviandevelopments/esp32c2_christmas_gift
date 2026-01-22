@@ -120,6 +120,8 @@ def update_photo():
     offset_x = (240 - SRC_SIZE * SCALE) // 2
     offset_y = (240 - SRC_SIZE * SCALE) // 2
 
+    set_window(0, 0, 239, 239)
+
     pixel_index = 0
     for chunk_n in range(CHUNKS):
         try:
@@ -134,7 +136,7 @@ def update_photo():
                     sy = pixel_index // SRC_SIZE
                     x = offset_x + sx * SCALE
                     y = offset_y + sy * SCALE
-                    set_window(x, y, x + SCALE - 1, y + SCALE - 1)
+                    
                     for _ in range(SCALE * SCALE):
                         send_byte(high, 1)
                         send_byte(low, 1)
