@@ -3,6 +3,7 @@ import machine
 import urequests
 import os
 import gc
+machine.freq(160000000)  # or try 120000000 if it crashes
 
 # === Pins ===
 sck = machine.Pin(8, machine.Pin.OUT)
