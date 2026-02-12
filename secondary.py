@@ -399,7 +399,7 @@ device_config = {
     '34:98:7A:06:FC:A0': {'coin': 'DOGE', 'amount': 40.7874, 'endpoint': 'doge'},
     '34:98:7A:06:FB:D0': {'coin': 'PEPE', 'amount': 1291895, 'endpoint': 'pepe'},
     '34:98:7A:07:11:24': {'coin': 'LTC', 'amount': 0.067632, 'endpoint': 'ltc'},
-    '34:98:7A:07:12:B8': {'coin': 'PEPE', 'amount': 1291895, 'endpoint': 'pepe'}, # Testing Chip
+    '34:98:7A:07:12:B8': {'coin': 'TSLA', 'amount': 0.012164027, 'endpoint': 'tesla-xstock'}, # Testing Chip
     '34:98:7A:07:06:B4': {'coin': 'BTC', 'amount': 0.0000566, 'endpoint': 'btc'},
 }
 config = device_config.get(mac_str, {'coin': 'BTC', 'amount': 0.0000566, 'endpoint': 'btc'})
