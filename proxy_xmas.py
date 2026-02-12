@@ -36,7 +36,7 @@ HOLDINGS = {
     '34:98:7A:06:FC:A0': {'coin': 'doge', 'amount': 40.7874},
     '34:98:7A:06:FB:D0': {'coin': 'pepe', 'amount': 1291895},
     '34:98:7A:07:11:24': {'coin': 'ltc', 'amount': 0.067632},
-    '34:98:7A:07:12:B8': {'coin': 'pepe', 'amount': 1291895},  # Testing chip
+    '34:98:7A:07:12:B8': {'coin': 'tsla', 'amount': 0.012164027},  # Testing chip
     '34:98:7A:07:06:B4': {'coin': 'btc', 'amount': 0.0000566},
 }
 
@@ -133,7 +133,7 @@ def fetch_data():
     global cached_prices, cached_logos, last_fetch_time
     while True:
         # Prices only
-        ids = "bitcoin,solana,dogecoin,pepe,ripple,litecoin"
+        ids = "bitcoin,solana,dogecoin,pepe,ripple,litecoin,tesla-xstock"
         try:
             r = requests.get(f'https://api.coingecko.com/api/v3/simple/price?ids={ids}&vs_currencies=usd', timeout=10)
             r.raise_for_status()
@@ -144,6 +144,7 @@ def fetch_data():
             cached_prices['pepe'] = f"{data['pepe']['usd']:.10f}"
             cached_prices['xrp'] = f"{data['ripple']['usd']:.4f}"
             cached_prices['ltc'] = f"{data['litecoin']['usd']:.4f}"
+            cached_prices['tsla'] = f"{data['tesla-xstock']['usd']:.4f}"
         except Exception as e:
             print(f"Price fetch error: {e}")
        
@@ -155,6 +156,7 @@ def fetch_data():
             'pepe': 'https://cryptologos.cc/logos/pepe-pepe-logo.png',
             'xrp': 'https://cryptologos.cc/logos/xrp-xrp-logo.png',
             'ltc': 'https://cryptologos.cc/logos/litecoin-ltc-logo.png',
+            'tsla': 'https://cryptologos.cc/logos/ark-ark-logo.png',
         }
         for coin, url in logo_urls.items():
             if coin not in cached_logos:
