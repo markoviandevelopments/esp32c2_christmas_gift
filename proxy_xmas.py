@@ -6,29 +6,25 @@ import time
 from PIL import Image
 import io
 import os
-from zoneinfo import ZoneInfo  # Available in Python 3.9+, standard on modern Ubuntu
+from zoneinfo import ZoneInfo # Available in Python 3.9+, standard on modern Ubuntu
 import datetime
 import struct
-
 app = Flask(__name__)
-
 # Directories and files
 LOGO_DIR = "logos"
 os.makedirs(LOGO_DIR, exist_ok=True)
-
 # Cached data
-cached_prices = { 'btc': "error", 'sol': "error", 'doge': "error", 'pepe': "error", 'xrp': "error", 'ltc': "error" }
+cached_prices = { 'btc': "error", 'sol': "error", 'doge': "error", 'pepe': "error", 'xrp': "error", 'ltc': "error", 'tsla': "error" }
 cached_time = "error"
-cached_logos = {}  # coin -> "0xFFFF,0x0000,..." string
+cached_logos = {} # coin -> "0xFFFF,0x0000,..." string
 last_fetch_time = 0
 CACHE_SECONDS = 180
-cached_big_logos = {}  # coin -> list of int RGB565 pixels (160x80 = 12800)
+cached_big_logos = {} # coin -> list of int RGB565 pixels (160x80 = 12800)
 BIG_WIDTH = 160
 BIG_HEIGHT = 80
-CHUNK_SIZE = 256  # ~1000 pixels/chunk (~5-6KB response, safe)
-PRESERVE_ASPECT_RATIO = True  # Set False to force-stretch to 160x80 (original behavior)
+CHUNK_SIZE = 256 # ~1000 pixels/chunk (~5-6KB response, safe)
+PRESERVE_ASPECT_RATIO = True # Set False to force-stretch to 160x80 (original behavior)
 lock = threading.Lock()
-
 # Hard-coded holdings
 HOLDINGS = {
     '34:98:7A:07:13:B4': {'coin': 'xrp', 'amount': 2.76412},
@@ -36,15 +32,12 @@ HOLDINGS = {
     '34:98:7A:06:FC:A0': {'coin': 'doge', 'amount': 40.7874},
     '34:98:7A:06:FB:D0': {'coin': 'pepe', 'amount': 1291895},
     '34:98:7A:07:11:24': {'coin': 'ltc', 'amount': 0.067632},
-    '34:98:7A:07:12:B8': {'coin': 'tsla', 'amount': 0.012164027},  # Testing chip
+    '34:98:7A:07:12:B8': {'coin': 'tsla', 'amount': 0.012164027}, # Testing chip
     '34:98:7A:07:06:B4': {'coin': 'btc', 'amount': 0.0000566},
 }
-
 TEST_MAC = '34:98:7A:07:12:B8'
-
 def rgb565(r, g, b):
     return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
-
 def load_or_download_logo(coin, url):
     local_path = os.path.join(LOGO_DIR, f"{coin}.png")
     if os.path.exists(local_path):
@@ -76,27 +69,26 @@ def load_or_download_logo(coin, url):
     except Exception as e:
         print(f"Logo processing error for {coin}: {e}")
         return "error"
-
 def generate_big_logo(coin):
     if coin in cached_big_logos:
         return cached_big_logos[coin]
-   
+  
     local_path = os.path.join(LOGO_DIR, f"{coin}.png")
     if not os.path.exists(local_path):
         cached_big_logos[coin] = None
         return None
-   
+  
     try:
         img = Image.open(local_path).convert('RGB')
         orig_w, orig_h = img.size
-        
+       
         if PRESERVE_ASPECT_RATIO:
             # Uniform scale: limiting side fills its axis exactly
             ratio = min(BIG_WIDTH / orig_w, BIG_HEIGHT / orig_h)
-            new_w = max(1, int(orig_w * ratio))   # Avoid zero size
+            new_w = max(1, int(orig_w * ratio)) # Avoid zero size
             new_h = max(1, int(orig_h * ratio))
             img = img.resize((new_w, new_h), Image.LANCZOS)
-            
+           
             # Centering offsets for black bars
             offset_x = (BIG_WIDTH - new_w) // 2
             offset_y = (BIG_HEIGHT - new_h) // 2
@@ -105,7 +97,7 @@ def generate_big_logo(coin):
             img = img.resize((BIG_WIDTH, BIG_HEIGHT), Image.LANCZOS)
             new_w, new_h = BIG_WIDTH, BIG_HEIGHT
             offset_x = offset_y = 0
-        
+       
         # Generate full 160x80 pixel list (black where bars are)
         pixels = []
         for y in range(BIG_HEIGHT):
@@ -113,13 +105,13 @@ def generate_big_logo(coin):
                 if PRESERVE_ASPECT_RATIO and \
                    (x < offset_x or x >= offset_x + new_w or
                     y < offset_y or y >= offset_y + new_h):
-                    pixels.append(0)  # Explicit black for bars
+                    pixels.append(0) # Explicit black for bars
                 else:
                     px_x = x - offset_x
                     px_y = y - offset_y
                     r, g, b = img.getpixel((px_x, px_y))
                     pixels.append(rgb565(r, g, b))
-        
+       
         cached_big_logos[coin] = pixels
         print(f"[{time.strftime('%H:%M:%S')}] Generated big 160x80 logo for {coin} "
               f"({'preserved AR' if PRESERVE_ASPECT_RATIO else 'stretched'})")
@@ -128,7 +120,6 @@ def generate_big_logo(coin):
         print(f"Big logo error {coin}: {e}")
         cached_big_logos[coin] = None
         return None
-
 def fetch_data():
     global cached_prices, cached_logos, last_fetch_time
     while True:
@@ -144,10 +135,10 @@ def fetch_data():
             cached_prices['pepe'] = f"{data['pepe']['usd']:.10f}"
             cached_prices['xrp'] = f"{data['ripple']['usd']:.4f}"
             cached_prices['ltc'] = f"{data['litecoin']['usd']:.4f}"
-            cached_prices['tsla'] = f"{data['tesla-xstock']['usd']:.4f}"
+            cached_prices['tsla'] = f"{data['tesla-xstock']['usd']:.2f}"
         except Exception as e:
             print(f"Price fetch error: {e}")
-       
+      
         # Logos (only on first run)
         logo_urls = {
             'btc': 'https://cryptologos.cc/logos/bitcoin-btc-logo.png',
@@ -156,26 +147,24 @@ def fetch_data():
             'pepe': 'https://cryptologos.cc/logos/pepe-pepe-logo.png',
             'xrp': 'https://cryptologos.cc/logos/xrp-xrp-logo.png',
             'ltc': 'https://cryptologos.cc/logos/litecoin-ltc-logo.png',
-            'tsla': 'https://cryptologos.cc/logos/ark-ark-logo.png',
+            'tsla': 'https://upload.wikimedia.org/wikipedia/commons/e/e8/Tesla_logo.png',
         }
         for coin, url in logo_urls.items():
             if coin not in cached_logos:
                 cached_logos[coin] = load_or_download_logo(coin, url)
-        
-        for coin in logo_urls:
-            generate_big_logo(coin)  # Pre-generate big versions
        
+        for coin in logo_urls:
+            generate_big_logo(coin) # Pre-generate big versions
+      
         with lock:
             last_fetch_time = time.time()
         print(f"[{time.strftime('%H:%M:%S')}] Prices and logos refreshed")
         time.sleep(CACHE_SECONDS)
-
 @app.route('/<coin>')
 def get_price(coin):
     coin = coin.lower()
     with lock:
         return cached_prices.get(coin, "error")
-
 @app.route('/biglogo_chunks/<coin>')
 def biglogo_chunks(coin):
     coin = coin.lower()
@@ -184,13 +173,12 @@ def biglogo_chunks(coin):
         return "0"
     chunks = (len(pixels) + CHUNK_SIZE - 1) // CHUNK_SIZE
     return str(chunks)
-
 @app.route('/biglogo/<coin>/<int:chunk>')
 def biglogo_chunk(coin, chunk):
     coin = coin.lower()
     pixels = generate_big_logo(coin)
     if pixels is None:
-        return b''  # empty bytes = error on client
+        return b'' # empty bytes = error on client
     start = chunk * CHUNK_SIZE
     if start >= len(pixels):
         return b''
@@ -200,7 +188,6 @@ def biglogo_chunk(coin, chunk):
         return b''
     # Binary RGB565, big-endian (high byte first)
     return struct.pack(">{}H".format(len(chunk_pixels)), *chunk_pixels)
-
 @app.route('/time')
 def get_central_time():
     try:
@@ -211,7 +198,6 @@ def get_central_time():
     except Exception as e:
         print(f"Time generation error: {e}")
         return "error"
-
 @app.route('/logo/<coin>')
 def get_logo(coin):
     coin = coin.lower()
@@ -219,13 +205,12 @@ def get_logo(coin):
         logo_data = cached_logos.get(coin, "error")
         if logo_data == "error":
             return "error", 404
-        return logo_data  # Plain text comma-separated
-
+        return logo_data # Plain text comma-separated
 @app.route('/rank')
 def get_rank():
     with lock:
         prices = cached_prices.copy()
-    
+   
     values = {}
     for mac, info in HOLDINGS.items():
         coin_key = info['coin']
@@ -235,7 +220,7 @@ def get_rank():
             values[mac] = usd
         except:
             values[mac] = 0.0
-    
+   
     # Helper to assign competition ranks (tied get same rank, next skips)
     def assign_ranks(mac_list):
         if not mac_list:
@@ -257,27 +242,25 @@ def get_rank():
                 rank_dict[sorted_macs[j]] = current_rank
             i = tie_end
         return rank_dict
-    
+   
     # Real ranking (exclude test)
     real_macs = [m for m in HOLDINGS if m != TEST_MAC]
     real_rank = assign_ranks(real_macs)
-    
+   
     # Hypo ranking (include test)
     hypo_rank = assign_ranks(list(HOLDINGS.keys()))
-    
+   
     response = {}
     for mac in HOLDINGS:
         if mac == TEST_MAC:
             response[mac] = int(hypo_rank.get(mac, 99))
         else:
             response[mac] = int(real_rank.get(mac, 99))
-    
+   
     return jsonify(response)
-
 @app.route('/')
 def index():
-    return "Proxy - /btc /sol /doge /pepe /xrp /ltc /time /logo/<coin>"
-
+    return "Proxy - /btc /sol /doge /pepe /xrp /ltc /tsla /time /logo/<coin>"
 if __name__ == '__main__':
     threading.Thread(target=fetch_data, daemon=True).start()
     print("Proxy with local logo caching starting on http://0.0.0.0:9021")
