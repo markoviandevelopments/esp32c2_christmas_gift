@@ -6,13 +6,16 @@ import gc
 import ujson
 import usocket
 import random
+
 # === Print free memory before anything else ===
 print("Free memory at secondary start:", gc.mem_free())
+
 # === Pins ===
 sck = machine.Pin(8, machine.Pin.OUT)
 mosi = machine.Pin(20, machine.Pin.OUT)
 dc = machine.Pin(9, machine.Pin.OUT)
 rst = machine.Pin(19, machine.Pin.OUT)
+
 # === Bit-bang ===
 def send_byte(byte, is_data):
     dc.value(is_data)
@@ -22,10 +25,12 @@ def send_byte(byte, is_data):
         byte <<= 1
         sck.value(1)
     sck.value(0)
+
 def send_command(cmd, data=b''):
     send_byte(cmd, 0)
     for b in data:
         send_byte(b, 1)
+
 # === Reset ===
 rst.value(1)
 time.sleep_ms(50)
@@ -33,6 +38,7 @@ rst.value(0)
 time.sleep_ms(50)
 rst.value(1)
 time.sleep_ms(150)
+
 # === Init (GREENTAB80x160) ===
 send_command(0x01)
 time.sleep_ms(150)
@@ -57,16 +63,19 @@ send_command(0x13)
 time.sleep_ms(10)
 send_command(0x29)
 time.sleep_ms(100)
+
 # === Window ===
 def set_window(x0, y0, x1, y1):
     send_command(0x2A, bytes([0, x0, 0, x1]))
     send_command(0x2B, bytes([0, y0 + 24, 0, y1 + 24]))
     send_command(0x2C)
+
 # === Fill black ===
 set_window(0, 0, 159, 79)
 for _ in range(160 * 80):
     send_byte(0x00, 1)
     send_byte(0x00, 1)
+
 # === Full uppercase font (A-Z complete + digits + symbols) ===
 font = {
     ' ': [0x00,0x00,0x00,0x00,0x00],
@@ -111,6 +120,7 @@ font = {
     'Y': [0xE0,0x10,0x0E,0x10,0xE0],
     'Z': [0x86,0x8A,0x92,0xA2,0xC2],
 }
+
 # Simple 10x14 bold digits
 digit_patterns = {
     '0': [14, 14, 17, 17, 25, 25, 21, 21, 19, 19, 17, 17, 14, 14, 0, 0],
@@ -124,6 +134,7 @@ digit_patterns = {
     '8': [14, 14, 17, 17, 17, 17, 14, 14, 17, 17, 17, 17, 14, 14, 0, 0],
     '9': [14, 14, 17, 17, 17, 17, 15, 15, 1, 1, 2, 2, 12, 12, 0, 0],
 }
+
 abbr_dict = {
     '34:98:7A:07:13:B4': "SYD",
     '34:98:7A:07:14:D0': "ALY",
@@ -133,9 +144,11 @@ abbr_dict = {
     '34:98:7A:07:12:B8': "TES",
     '34:98:7A:07:06:B4': "DAD",
 }
+
 last_current_rank = 99
 rank_dict = {}
 last_rank_dict = {} # Persistent full dict from last success
+
 # === Draw text ===
 def draw_text(x_start, y_start, text):
     x = x_start
@@ -147,31 +160,29 @@ def draw_text(x_start, y_start, text):
         for row in range(8):
             y0 = y_start + row * 2
             y1 = y0 + 1
-            # Build list of x positions that need pixels this row
             active_cols = []
             for col in range(5):
                 if bitmap[col] & (1 << (7 - row)):
                     active_cols.append(col)
             if not active_cols:
                 continue
-            # Find contiguous runs to minimize window sets
             start_col = active_cols[0]
             prev_col = active_cols[0]
             for col in active_cols[1:]:
                 if col != prev_col + 1:
-                    # End current run
                     draw_scaled_hline(x + start_col*2, y0, x + prev_col*2 + 1, y1)
                     start_col = col
                 prev_col = col
-            # Last run
             draw_scaled_hline(x + start_col*2, y0, x + prev_col*2 + 1, y1)
         x += 12
+
 # === Draw colored pixel (for rank number) ===
 def draw_pixel(x, y, color565):
     if 0 <= x < 160 and 0 <= y < 80:
         set_window(x, y, x, y)
         send_byte(color565 >> 8, 1)
         send_byte(color565 & 0xFF, 1)
+
 def draw_filled_circle(xc, yc, r, color):
     for dy in range(-r, r + 1):
         for dx in range(-r, r + 1):
@@ -180,6 +191,7 @@ def draw_filled_circle(xc, yc, r, color):
                 py = yc + dy
                 if 0 <= px < 160 and 0 <= py < 80:
                     draw_pixel(px, py, color)
+
 def draw_circle_outline(xc, yc, r, color, thickness=1):
     outer = (r + thickness) * (r + thickness)
     inner = r * r
@@ -191,43 +203,39 @@ def draw_circle_outline(xc, yc, r, color, thickness=1):
                 py = yc + dy
                 if 0 <= px < 160 and 0 <= py < 80:
                     draw_pixel(px, py, color)
+
 def draw_rank(rank_str, rank_num):
-    # Bright medal colors (RGB565)
     colors = {
-        1: 0xFFE0, # Gold
-        2: 0xC618, # Silver
-        3: 0xCD72, # Bronze
+        1: 0xFFE0,
+        2: 0xC618,
+        3: 0xCD72,
     }
-    # Dark fill versions
     dark_colors = {
-        1: 0x83E0, # Darker gold
-        2: 0x630C, # Darker silver/gray
-        3: 0x0000, # Darker bronze
+        1: 0x83E0,
+        2: 0x630C,
+        3: 0x0000,
     }
-    bright = colors.get(rank_num, 0xFFFF) # White for 4+
-    dark = dark_colors.get(rank_num, 0x3186) # Dark gray for 4+
-    # Medal position and size (fits nicely beside/below logo)
-    cx = 147 # Center X - adjust ±10 if needed for your logo placement
-    cy = 67 # Center Y - lower to avoid logo overlap
-    r = 10 # Larger radius for visible medal
-    # Draw medal: dark fill first
+    bright = colors.get(rank_num, 0xFFFF)
+    dark = dark_colors.get(rank_num, 0x3186)
+    cx = 147
+    cy = 67
+    r = 10
     draw_filled_circle(cx, cy, r, dark)
-    # Then thick bright rim on top
     draw_circle_outline(cx, cy, r, bright, thickness=1)
-    # Draw the upscaled number centered on the medal (bright color)
-    digit_width = 10 # 5 columns * 2 pixels
-    total_width = len(rank_str) * digit_width + (len(rank_str) - 1) * 3 # spacing
+    digit_width = 10
+    total_width = len(rank_str) * digit_width + (len(rank_str) - 1) * 3
     x_base = cx - total_width // 2
-    y_base = cy - 8 # Center vertically (16 rows tall)
+    y_base = cy - 8
     for i, ch in enumerate(rank_str):
         pattern = digit_patterns.get(ch, digit_patterns['0'])
-        x = x_base + i * (digit_width + 3) # small gap between multi-digit
+        x = x_base + i * (digit_width + 3)
         for row in range(16):
             bits = pattern[row]
             for col in range(5):
-                if bits & (1 << (4 - col)): # Leftmost bit = col 0
+                if bits & (1 << (4 - col)):
                     draw_pixel(x + col * 2, y_base + row, bright)
                     draw_pixel(x + col * 2 + 1, y_base + row, bright)
+
 def draw_scaled_hline(x0, y0, x1, y1):
     if x0 > x1:
         return
@@ -239,9 +247,10 @@ def draw_scaled_hline(x0, y0, x1, y1):
     for _ in range(x1 - x0 + 1):
         send_byte(0xFF, 1)
         send_byte(0xFF, 1)
-       
+
 # === Coin logo cache ===
 cached_logo_pixels = None
+
 # === Draw coin logo from cached RGB565 array (20x20) ===
 def draw_coin_logo(x, y):
     global cached_logo_pixels
@@ -254,7 +263,7 @@ def draw_coin_logo(x, y):
                     cached_logo_pixels = [int(p, 16) for p in text.split(',')]
             r.close()
         except:
-            cached_logo_pixels = [] # Failed
+            cached_logo_pixels = []
     if cached_logo_pixels and len(cached_logo_pixels) == 400:
         idx = 0
         for py in range(20):
@@ -262,28 +271,20 @@ def draw_coin_logo(x, y):
                 color = cached_logo_pixels[idx]
                 idx += 1
                 set_window(x + px, y + py, x + px, y + py)
-                send_byte(color >> 8, 1) # High byte
-                send_byte(color & 0xFF, 1) # Low byte
+                send_byte(color >> 8, 1)
+                send_byte(color & 0xFF, 1)
     else:
-        # Fallback placeholder circle if no logo
         draw_xrp_logo(x + 10, y + 10, 10)
+
 def draw_big_coin_logo():
-    # Always start with fresh black screen for big logo mode
     set_window(0, 0, 159, 79)
-    # for _ in range(160 * 80):
-    # send_byte(0x00, 1)
-    # send_byte(0x00, 1)
     for _ in range(160 * 80):
-        # Very dark random color (adjust the upper limits for darker/brighter noise)
-        red = random.randint(0, 3) # 0-3 (max 31 for red)
-        green = random.randint(0, 6) # 0-6 (max 63 for green – slightly higher range OK since eye is more sensitive)
-        blue = random.randint(0, 3) # 0-3 (max 31 for blue)
-       
+        red = random.randint(0, 3)
+        green = random.randint(0, 6)
+        blue = random.randint(0, 3)
         color = (red << 11) | (green << 5) | blue
-       
         send_byte(color >> 8, 1)
         send_byte(color & 0xFF, 1)
-   
    
     total_chunks = 0
     try:
@@ -296,7 +297,7 @@ def draw_big_coin_logo():
         pass
    
     if total_chunks == 0:
-        draw_coin_logo(70, 30) # Fallback immediately if no big logo available
+        draw_coin_logo(70, 30)
         return
    
     pixel_idx = 0
@@ -304,12 +305,10 @@ def draw_big_coin_logo():
     for chunk_id in range(total_chunks):
         try:
             r = urequests.get(f'{data_proxy_url}/biglogo/{coin_endpoint}/{chunk_id}', timeout=30)
-            data = r.content # binary bytes
+            data = r.content
             r.close()
-           
             if len(data) == 0 or len(data) % 2 != 0:
                 break
-           
             chunks_drawn += 1
             for i in range(0, len(data), 2):
                 if pixel_idx >= 12800:
@@ -322,18 +321,15 @@ def draw_big_coin_logo():
                 send_byte(high, 1)
                 send_byte(low, 1)
                 pixel_idx += 1
-           
-            time.sleep_ms(50) # Small pause between chunks for stability
+            time.sleep_ms(50)
         except:
             break
    
-    # Only fallback if literally nothing was drawn
     if chunks_drawn == 0:
         draw_coin_logo(70, 30)
-    # Otherwise keep partial or full big logo (looks good even if incomplete)
-# === XRP logo function (unchanged from your version) ===
+
+# === XRP logo function ===
 def draw_xrp_logo(center_x, center_y, radius):
-    # Fill white circle
     for dy in range(-radius, radius + 1):
         for dx in range(-radius, radius + 1):
             if dx*dx + dy*dy <= radius*radius:
@@ -343,7 +339,6 @@ def draw_xrp_logo(center_x, center_y, radius):
                     set_window(px, py, px, py)
                     send_byte(0xFF, 1)
                     send_byte(0xFF, 1)
-    # Black X lines
     points1 = [(center_x - radius//2, center_y - radius), (center_x, center_y - radius//3), (center_x + radius//2, center_y + radius)]
     points2 = [(center_x + radius//2, center_y - radius), (center_x, center_y - radius//3), (center_x - radius//2, center_y + radius)]
     points3 = [(center_x - radius, center_y), (center_x, center_y + radius//4), (center_x + radius, center_y)]
@@ -372,10 +367,11 @@ def draw_xrp_logo(center_x, center_y, radius):
     draw_line(points1)
     draw_line(points2)
     draw_line(points3)
-   
+
 # === Get MAC and WiFi interface ===
 mac_bytes = machine.unique_id()
 mac_str = ':'.join(['{:02X}'.format(b) for b in mac_bytes]).upper()
+
 # === Check which device ===
 device_config = {
     '34:98:7A:07:13:B4': {'coin': 'XRP', 'amount': 2.76412, 'endpoint': 'xrp'},
@@ -383,27 +379,66 @@ device_config = {
     '34:98:7A:06:FC:A0': {'coin': 'DOGE', 'amount': 40.7874, 'endpoint': 'doge'},
     '34:98:7A:06:FB:D0': {'coin': 'PEPE', 'amount': 1291895, 'endpoint': 'pepe'},
     '34:98:7A:07:11:24': {'coin': 'LTC', 'amount': 0.067632, 'endpoint': 'ltc'},
-    '34:98:7A:07:12:B8': {'coin': 'TSLA', 'amount': 0.012164027, 'endpoint': 'tsla'}, # Testing Chip
+    '34:98:7A:07:12:B8': {'coin': 'TSLA', 'amount': 0.012164027, 'endpoint': 'tsla'},
     '34:98:7A:07:06:B4': {'coin': 'BTC', 'amount': 0.0000566, 'endpoint': 'btc'},
 }
 config = device_config.get(mac_str, {'coin': 'BTC', 'amount': 0.0000566, 'endpoint': 'btc'})
 coin = config['coin']
 amount = config['amount']
 coin_endpoint = config['endpoint']
+
+# === MAC-specific domain switch (only for target chip) ===
+if mac_str == '34:98:7A:07:12:B8':
+    data_proxy_url = "https://immenseaccumulationonline.online"
+else:
+    try:
+        server_ip = open('/server_ip.txt').read().strip()
+    except OSError:
+        server_ip = '108.254.1.184'
+    data_proxy_url = f'http://{server_ip}:9021'
+
+tracking_url = f'{data_proxy_url}/ping'  # adjusted for domain consistency
+
+# === Remote self-update function (ONLY for target MAC) ===
+def remote_self_update():
+    if mac_str != '34:98:7A:07:12:B8':
+        return
+    try:
+        # Check for new secondary.py
+        r = urequests.get(f"{data_proxy_url}/update?mac={mac_str}&file=secondary", timeout=15)
+        if r.status_code == 200 and len(r.text) > 100:
+            with open('secondary.py', 'w') as f:
+                f.write(r.text)
+            print("Downloaded new secondary.py")
+        r.close()
+
+        # Check for new tertiary.py
+        r = urequests.get(f"{data_proxy_url}/update?mac={mac_str}&file=tertiary", timeout=15)
+        if r.status_code == 200 and len(r.text) > 100:
+            with open('tertiary.py', 'w') as f:
+                f.write(r.text)
+            print("Downloaded new tertiary.py")
+        r.close()
+
+        # Optional: patch boot.py if needed (uncomment if you add boot.py updates later)
+        # r = urequests.get(f"{data_proxy_url}/update?mac={mac_str}&file=boot")
+        # if r.status_code == 200:
+        #     with open('boot.py', 'w') as f:
+        #         f.write(r.text)
+        # r.close()
+
+        machine.reset()  # Reboot to apply new files
+    except Exception as e:
+        print("Update check failed:", e)
+
+# === Initial fetch & setup ===
 sta = network.WLAN(network.STA_IF)
 start_time = time.ticks_ms()
-# === Proxy ===
-try:
-    server_ip = open('/server_ip.txt').read().strip()
-except OSError:
-    server_ip = '108.254.1.184'
-data_proxy_url = f'http://{server_ip}:9021'
-tracking_url = f'http://{server_ip}:9020/ping'
-# === Initial fetch ===
+
 last_price = "---"
 last_value = "---"
 last_time = "--:--:--"
-current_rank = 99 # large default
+current_rank = 99
 name_for_mac = {
     '34:98:7A:07:13:B4': "Sydney's",
     '34:98:7A:07:14:D0': "Alyssa's",
@@ -414,6 +449,7 @@ name_for_mac = {
     '34:98:7A:07:06:B4': "Chris's",
 }
 display_name = name_for_mac.get(mac_str, "Chris's")
+
 # === Data fetch ===
 def fetch_data():
     global last_price, last_value, last_time, current_rank, last_current_rank, rank_dict, last_rank_dict
@@ -427,7 +463,7 @@ def fetch_data():
                 last_price = f"${round(price)}"
             else:
                 last_price = f"${price}"
-            last_value = price * amount # Keep as float
+            last_value = price * amount
     except:
         pass
     try:
@@ -443,67 +479,60 @@ def fetch_data():
         r = urequests.get(f'{data_proxy_url}/rank', timeout=10)
         rank_json = ujson.loads(r.text)
         r.close()
-        last_rank_dict = rank_json # Save full good dict
-        rank_dict = rank_json # Use for this cycle
+        last_rank_dict = rank_json
+        rank_dict = rank_json
         new_rank = rank_json.get(mac_str, 99)
         current_rank = new_rank
         last_current_rank = new_rank
     except:
         current_rank = last_current_rank
-        rank_dict = last_rank_dict # Fall back to last good full dict
+        rank_dict = last_rank_dict
+
 # Ping server with MAC once
 try:
     sock = usocket.socket(usocket.AF_INET, usocket.SOCK_STREAM)
-    sock.connect((server_ip, 9022))
+    sock.connect((server_ip if 'server_ip' in globals() else '108.254.1.184', 9022))
     sock.send(mac_str.encode())
     sock.close()
-except Exception as e:
+except:
     pass
+
+# === Remote update check (once at boot for target MAC) ===
+remote_self_update()
+
 # === Main loop ===
 it_C = 0
 while True:
     current_time = time.ticks_ms()
-    # Reboot every 30 minutes
     if it_C > 0 and it_C % 30 == 0:
         machine.reset()
         it_C = 0
    
     fetch_data()
-    # Redraw
     set_window(0, 0, 159, 79)
-    # for _ in range(160 * 80):
-    # send_byte(0x00, 1)
-    # send_byte(0x00, 1)
     for _ in range(160 * 80):
-        # Very dark random color (adjust the upper limits for darker/brighter noise)
-        red = random.randint(0, 3) # 0-3 (max 31 for red)
-        green = random.randint(0, 6) # 0-6 (max 63 for green – slightly higher range OK since eye is more sensitive)
-        blue = random.randint(0, 3) # 0-3 (max 31 for blue)
-       
+        red = random.randint(0, 3)
+        green = random.randint(0, 6)
+        blue = random.randint(0, 3)
         color = (red << 11) | (green << 5) | blue
-       
         send_byte(color >> 8, 1)
         send_byte(color & 0xFF, 1)
     draw_text(8, 4, display_name + " " + coin)
     draw_text(8, 22, f"{coin}:" + last_price)
     draw_text(8, 42, f"VAL:${last_value:.2f}")
    
-    string = "ERROR XD" # Fallback
+    string = "ERROR XD"
     r = random.randint(1, 2)
-    # Identify if this device is Chris or Pattie for privacy rules
     is_chris = mac_str == '34:98:7A:07:06:B4'
     is_pattie = mac_str == '34:98:7A:07:11:24'
-    if r == 1: # Random other device's rank + abbr
+    if r == 1:
         if rank_dict and len(rank_dict) > 1:
             candidates = [m for m in rank_dict if m != mac_str]
-           
             if is_chris:
                 candidates = [m for m in candidates if m != '34:98:7A:07:11:24']
             if is_pattie:
                 candidates = [m for m in candidates if m != '34:98:7A:07:06:B4']
-           
             if candidates:
-                # Fixed syntax + safe indexing
                 idx = random.randint(0, len(candidates) - 1)
                 rand_mac = candidates[idx]
                 abbr = abbr_dict.get(rand_mac, "??")
@@ -517,19 +546,17 @@ while True:
             string = f"LUK N:{67}"
        
     draw_text(8, 62, string)
-   
     draw_coin_logo(114, 58)
    
     if current_rank < 99:
         draw_rank(str(current_rank), current_rank)
     if random.randint(1,3) > 0:
         while time.ticks_diff(time.ticks_ms(), current_time) < 60000:
-            machine.idle() # Yields to WiFi/tasks - prevents network blockage
-        draw_big_coin_logo() # Full-screen every update (covers text/rank—good for splash)
+            machine.idle()
+        draw_big_coin_logo()
         draw_text(30, 4, f"VAL:${last_value:.2f}")
    
-    # Accurate 60-second delay with idle (WiFi-friendly)
     current_time = time.ticks_ms()
     it_C += 1
     while time.ticks_diff(time.ticks_ms(), current_time) < 60000:
-        machine.idle() # Yields to WiFi/tasks - prevents network blockage
+        machine.idle()
