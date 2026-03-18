@@ -177,8 +177,6 @@ def draw_text(x_start, y_start, text):
         x += 12
 
 # === Draw colored pixel, draw_filled_circle, draw_circle_outline, draw_rank, draw_scaled_hline, draw_coin_logo, draw_big_coin_logo, draw_xrp_logo (all original) ===
-# (All these functions are exactly the same as your original file — I copied them verbatim to keep 100% compatibility)
-
 def draw_pixel(x, y, color565):
     if 0 <= x < 160 and 0 <= y < 80:
         set_window(x, y, x, y)
