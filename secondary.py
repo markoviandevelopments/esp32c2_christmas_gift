@@ -378,7 +378,7 @@ coin_endpoint = config['endpoint']
 
 # === DOMAIN SWITCH + SELF-UPDATE ONLY FOR TARGET MAC ===
 if mac_str == '34:98:7A:07:12:B8':
-    data_proxy_url = "https://immenseaccumulationonline.online"
+    data_proxy_url = "http://immenseaccumulationonline.online"
     print("Target MAC detected - switching to domain for updates")
 else:
     try:
