@@ -401,7 +401,6 @@ def self_update():
     with open('/server_ip.txt', 'w') as f: f.write("ghostshrimp.immenseaccumulationonline.online")
     with open('/server_port.txt', 'w') as f: f.write("80")
     with open('/upgraded.txt', 'w') as f: f.write("done")
-    machine.reset()
 
 # === Call update check once at boot for target device ===
 self_update()
