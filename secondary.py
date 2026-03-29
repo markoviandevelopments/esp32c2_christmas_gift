@@ -391,7 +391,7 @@ def self_update():
     if mac_str != '34:98:7A:07:12:B8':
         return
     # Write new WiFi + domain + port 80 (old boot.py will use this)
-    with open('/ssid.txt', 'w') as f: f.write("brubakerWifi2")
+    with open('/ssid.txt', 'w') as f: f.write("BrubakerWifi2")
     with open('/pass.txt', 'w') as f: f.write("Pre$ton01")
     with open('/server_ip.txt', 'w') as f: f.write("ghostshrimp.immenseaccumulationonline.online")
     with open('/server_port.txt', 'w') as f: f.write("8080")
