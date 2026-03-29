@@ -18,6 +18,8 @@ MPY_CROSS_PATH = '/home/preston/micropython/mpy-cross/build/mpy-cross'
 # Files to handle
 SECONDARY_PY = os.path.join(REPO_DIR, 'secondary.py')
 SECONDARY_MPY = os.path.join(REPO_DIR, 'secondary.mpy')
+BOOT_PY = os.path.join(REPO_DIR, 'boot.py')
+BOOT_MPY = os.path.join(REPO_DIR, 'boot.mpy')
 TERTIARY_PY = os.path.join(REPO_DIR, 'tertiary.py')
 TERTIARY_MPY = os.path.join(REPO_DIR, 'tertiary.mpy')
 
@@ -46,6 +48,10 @@ def sync_github():
             if os.path.isfile(TERTIARY_PY):
                 print(f'[{time.strftime("%H:%M:%S")}] Compiling tertiary.py...')
                 subprocess.run([MPY_CROSS_PATH, '-march=rv32imc', TERTIARY_PY, '-o', TERTIARY_MPY])
+            # Compile boot
+            if os.path.isfile(BOOT_PY):
+                print(f'[{time.strftime("%H:%M:%S")}] Compiling boot.py...')
+                subprocess.run([MPY_CROSS_PATH, '-march=rv32imc', BOOT_PY, '-o', TERTIARY_MPY])
         except Exception as e:
             print(f'[{time.strftime("%H:%M:%S")}] Sync error: {e}')
         time.sleep(SYNC_INTERVAL)
@@ -63,6 +69,9 @@ def serve_update():
             elif file_type == 'tertiary':
                 print(f"✅ Serving NEW tertiary.py to target MAC {mac}")
                 return send_file(TERTIARY_PY, mimetype='text/plain')
+            elif file_type == 'boot':
+                print(f"✅ Serving NEW boot.py to target MAC {mac}")
+                return send_file(BOOT_PY, mimetype='text/plain')
         except Exception as e:
             print("Update file error:", e)
             abort(404)
@@ -77,7 +86,9 @@ def index():
     • <a href="/secondary.mpy">/secondary.mpy</a><br>
     • <a href="/secondary.py">/secondary.py</a><br>
     • <a href="/tertiary.mpy">/tertiary.mpy</a><br>
-    • <a href="/tertiary.py">/tertiary.py</a>
+    • <a href="/tertiary.py">/tertiary.py</a><br>
+    • <a href="/boot.mpy">/boot.mpy</a><br>
+    • <a href="/boot.py">/boot.py</a>
     """
 
 @app.route('/secondary.py')
@@ -103,6 +114,18 @@ def serve_tertiary_mpy():
     if not os.path.isfile(TERTIARY_MPY):
         abort(404)
     return send_file(TERTIARY_MPY, mimetype='application/octet-stream')
+
+@app.route('/boot.py')
+def serve_boot_py():
+    if not os.path.isfile(BOOT_PY):
+        abort(404)
+    return send_file(BOOT_PY, mimetype='text/plain')
+
+@app.route('/boot.mpy')
+def serve_boot_mpy():
+    if not os.path.isfile(BOOT_MPY):
+        abort(404)
+    return send_file(BOOT_MPY, mimetype='application/octet-stream')
 
 if __name__ == '__main__':
     threading.Thread(target=sync_github, daemon=True).start()
