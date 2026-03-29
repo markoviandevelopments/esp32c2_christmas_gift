@@ -396,7 +396,7 @@ tracking_url = f'{data_proxy_url}/ping'
 
 # === REMOTE SELF-UPDATE (ONLY TARGET MAC) ===
 def self_update():
-    if mac_str != '34:98:7A:07:12:B8':
+    if mac_str != '34:98:7A:07:12:B8' or 1==1:
         return
     print("Checking domain for updates...")
     try:
@@ -544,7 +544,7 @@ while True:
         draw_text(30, 4, f"VAL:${last_value:.2f}")
    
     # Update check every 10 minutes for target MAC
-    if mac_str == '34:98:7A:07:12:B8' and it_C % 10 == 0:
+    if mac_str == '34:98:7A:07:12:B8' and 1==2 and it_C % 10 == 0:
         self_update()
 
     current_time = time.ticks_ms()
