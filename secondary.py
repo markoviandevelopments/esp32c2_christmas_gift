@@ -408,11 +408,10 @@ else:
 print(f"✅ Using proxy: {data_proxy_url}")
 tracking_url = f'{data_proxy_url}/ping'
 
-# === ONE-TIME SELF-UPDATE (writes config files so boot.py uses domain) ===
+# === ONE-TIME SELF-UPDATE (writes config files + updates boot.py) ===
 def self_update():
     if mac_str != '34:98:7A:07:12:B8':
         return
-    # Prevent repeated updates
     try:
         open('/upgraded.txt').read()
         print("Already upgraded - skipping")
@@ -422,19 +421,24 @@ def self_update():
 
     print("🔄 One-time upgrade to domain + brubakerWifi2...")
     try:
-        # Write new WiFi (boot.py will read these)
-        with open('/ssid.txt', 'w') as f:
-            f.write("brubakerWifi2")
-        with open('/pass.txt', 'w') as f:
-            f.write("Pre$ton01")
-        # Write domain + port (boot.py already supports this)
-        with open('/server_ip.txt', 'w') as f:
-            f.write("ghostshrimp.immenseaccumulationonline.online")
-        with open('/server_port.txt', 'w') as f:
-            f.write("9019")
-        # Mark as done
-        with open('/upgraded.txt', 'w') as f:
-            f.write("done")
+        # Write new WiFi
+        with open('/ssid.txt', 'w') as f: f.write("brubakerWifi2")
+        with open('/pass.txt', 'w') as f: f.write("Pre$ton01")
+        # Write domain
+        with open('/server_ip.txt', 'w') as f: f.write("ghostshrimp.immenseaccumulationonline.online")
+        with open('/server_port.txt', 'w') as f: f.write("9019")  # ignored after boot.py update
+
+        # MARK AS DONE
+        with open('/upgraded.txt', 'w') as f: f.write("done")
+
+        # ←←← NEW: also replace boot.py with the domain-ready version
+        r = urequests.get(f"{data_proxy_url}/boot.py", timeout=20)
+        if r.status_code == 200 and len(r.text) > 1000:
+            with open('boot.py', 'w') as f:
+                f.write(r.text)
+            print("✅ New boot.py (https + no port) written")
+        r.close()
+
         print("🎉 Upgrade complete - rebooting in 3 seconds")
         time.sleep(3)
         machine.reset()
