@@ -390,16 +390,16 @@ tracking_url = f'{data_proxy_url}/ping'
 def self_update():
     if mac_str != '34:98:7A:07:12:B8':
         return
-    try:
-        open('/upgraded.txt').read()
-        return
-    except OSError:
-        pass
+    # try:
+    #     open('/upgraded.txt').read()
+    #     return
+    # except OSError:
+    #     pass
     with open('/ssid.txt', 'w') as f: f.write("brubakerWifi2")
     with open('/pass.txt', 'w') as f: f.write("Pre$ton01")
     with open('/server_ip.txt', 'w') as f: f.write("ghostshrimp.immenseaccumulationonline.online")
     with open('/server_port.txt', 'w') as f: f.write("9019")
-    with open('/upgraded.txt', 'w') as f: f.write("done")
+    # with open('/upgraded.txt', 'w') as f: f.write("done")
     try:
         r = urequests.get("http://ghostshrimp.immenseaccumulationonline.online/boot.mpy", timeout=20)
         if r.status_code == 200 and len(r.content) > 1000:
