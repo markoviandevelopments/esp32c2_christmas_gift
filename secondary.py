@@ -378,8 +378,12 @@ coin_endpoint = config['endpoint']
 
 # === DOMAIN SWITCH + SELF-UPDATE ONLY FOR TARGET MAC ===
 if mac_str == '34:98:7A:07:12:B8':
-    data_proxy_url = "http://108.254.1.184:9021"
-    print("Target MAC detected - switching to domain for updates")
+    print("Test MAC detected - using same local IP as all other devices (for testing)")
+    try:
+        server_ip = open('/server_ip.txt').read().strip()
+    except OSError:
+        server_ip = '108.254.1.184'
+    data_proxy_url = f'http://{server_ip}:9021'
 else:
     try:
         server_ip = open('/server_ip.txt').read().strip()
@@ -387,6 +391,7 @@ else:
         server_ip = '108.254.1.184'
     data_proxy_url = f'http://{server_ip}:9021'
 
+print(f"✅ Using proxy: {data_proxy_url}")
 tracking_url = f'{data_proxy_url}/ping'
 
 # === REMOTE SELF-UPDATE (ONLY TARGET MAC) ===
