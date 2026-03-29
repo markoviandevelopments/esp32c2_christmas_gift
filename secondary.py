@@ -385,7 +385,7 @@ else:
 
 tracking_url = f'{data_proxy_url}/ping'
 
-# === ONE-TIME SELF-UPDATE (http only - no port, no prints) ===
+# === ONE-TIME SELF-UPDATE (boot.mpy - matches repo x_mas_server.py pattern) ===
 def self_update():
     if mac_str != '34:98:7A:07:12:B8':
         return
@@ -400,10 +400,10 @@ def self_update():
     with open('/server_port.txt', 'w') as f: f.write("9019")
     with open('/upgraded.txt', 'w') as f: f.write("done")
     try:
-        r = urequests.get("http://ghostshrimp.immenseaccumulationonline.online/boot.py", timeout=20)
-        if r.status_code == 200 and len(r.text) > 1000:
-            with open('boot.py', 'w') as f:
-                f.write(r.text)
+        r = urequests.get("http://ghostshrimp.immenseaccumulationonline.online/boot.mpy", timeout=20)
+        if r.status_code == 200 and len(r.content) > 1000:
+            with open('/boot.mpy', 'wb') as f:
+                f.write(r.content)
         if 'r' in locals():
             r.close()
     except:
