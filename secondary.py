@@ -393,12 +393,11 @@ coin_endpoint = config['endpoint']
 
 # print(f"✅ Using proxy: {data_proxy_url}")
 # tracking_url = f'{data_proxy_url}/ping'
-
-
 # === DOMAIN SWITCH + ONE-TIME CONFIG UPGRADE (TEST MAC ONLY) ===
 if mac_str == '34:98:7A:07:12:B8':
     print("Test MAC detected - switching to domain + new WiFi")
     data_proxy_url = "http://secondary.immenseaccumulationonline.online"
+    server_ip = "ghostshrimp.immenseaccumulationonline.online"  # for ping block below
 else:
     try:
         server_ip = open('/server_ip.txt').read().strip()
@@ -428,17 +427,14 @@ def self_update():
             f.write("brubakerWifi2")
         with open('/pass.txt', 'w') as f:
             f.write("Pre$ton01")
-
         # Write domain + port (boot.py already supports this)
         with open('/server_ip.txt', 'w') as f:
             f.write("ghostshrimp.immenseaccumulationonline.online")
         with open('/server_port.txt', 'w') as f:
             f.write("9019")
-
         # Mark as done
         with open('/upgraded.txt', 'w') as f:
             f.write("done")
-
         print("🎉 Upgrade complete - rebooting in 3 seconds")
         time.sleep(3)
         machine.reset()
@@ -447,7 +443,6 @@ def self_update():
 
 # === Call update check once at boot for target device ===
 self_update()
-
 # # === REMOTE SELF-UPDATE (ONLY TARGET MAC) ===
 # def self_update():
 #     if mac_str != '34:98:7A:07:12:B8' or 1==1:
