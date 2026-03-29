@@ -113,12 +113,12 @@ async def connect_wifi(ssid, password):
     return False
 
 async def download_secondary():
-    url = f'http://{provisioned_server_ip}:{provisioned_server_port}/secondary.mpy'
+    url = f'https://{provisioned_server_ip}/secondary.mpy'   # ← THIS IS THE ONLY CHANGE
     print(f'Downloading from {url}')
     print('Free memory before download:', gc.mem_free())
     for attempt in range(5):
         try:
-            resp = urequests.get(url, timeout=10)
+            resp = urequests.get(url, timeout=15)
             if resp.status_code == 200:
                 with open('/secondary.mpy', 'wb') as f:
                     f.write(resp.content)
