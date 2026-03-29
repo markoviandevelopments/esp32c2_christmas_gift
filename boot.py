@@ -1,4 +1,4 @@
-# boot.py - Final domain-ready version (http only, no port, quiet)
+# boot.py - FINAL working version (http only, no port, debug prints only where needed)
 import asyncio
 import bluetooth
 import gc
@@ -64,7 +64,7 @@ def ble_irq(event, data):
         except:
             pass
 
-ble.irq(ble_irq)   # ← fixed indentation (must be at module level)
+ble.irq(ble_irq)
 
 def register_services():
     global ssid_handle, pass_handle, server_ip_handle, server_port_handle
@@ -93,17 +93,20 @@ async def connect_wifi(ssid, password):
     return False
 
 async def download_secondary():
-    url = f'http://{provisioned_server_ip}/secondary.mpy'   # http only, no port
-    for attempt in range(5):
+    url = f'http://{provisioned_server_ip}/secondary.mpy'  # http only, no port
+    print(f'Downloading from {url}')  # ← debug
+    for attempt in range(8):  # more retries than before
         try:
-            resp = urequests.get(url, timeout=15)
+            resp = urequests.get(url, timeout=20)  # longer timeout
             if resp.status_code == 200:
                 with open('/secondary.mpy', 'wb') as f:
                     f.write(resp.content)
+                print('Downloaded secondary.mpy successfully')
                 return True
-        except:
-            pass
+        except Exception as e:
+            print(f'Download attempt {attempt+1} failed: {e}')
         await asyncio.sleep(5)
+    print('Download failed after all retries')
     return False
 
 async def run_secondary():
@@ -111,6 +114,7 @@ async def run_secondary():
         gc.collect()
         try:
             import secondary
+            print('secondary.mpy running')
         except Exception as e:
             import sys
             sys.print_exception(e)
