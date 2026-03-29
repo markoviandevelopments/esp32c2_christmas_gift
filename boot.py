@@ -76,7 +76,7 @@ def ble_irq(event, data):
         except Exception as e:
             #print('IRQ error:', e)
 
-ble.irq(ble_irq)
+    ble.irq(ble_irq)
 
 def register_services():
     global ssid_handle, pass_handle, server_ip_handle, server_port_handle
