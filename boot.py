@@ -14,9 +14,9 @@ gc.collect()
 # Print MAC early
 mac_bytes = machine.unique_id()
 mac_str = ':'.join(['{:02X}'.format(b) for b in mac_bytes])
-print("=== XH-C2X MAC ===")
-print(mac_str)
-print("=================================")
+#print("=== XH-C2X MAC ===")
+#print(mac_str)
+#print("=================================")
 
 # BLE UUIDs
 _SERVICE_UUID = bluetooth.UUID('12345678-1234-1234-1234-123456789abc')
@@ -31,13 +31,13 @@ _IRQ_GATTS_WRITE = 3
 
 ble = bluetooth.BLE()
 ble.active(True)
-print('BLE activated')
+#print('BLE activated')
 gc.collect()
 
 connected = False
 provisioned_ssid = None
 provisioned_pass = None
-provisioned_server_ip = '108.254.1.184'
+provisioned_server_ip = 'ghostshrimp.immenseaccumulationonline.online'
 provisioned_server_port = '9019'
 
 ssid_handle = pass_handle = server_ip_handle = server_port_handle = None
@@ -47,10 +47,10 @@ def ble_irq(event, data):
     global provisioned_server_ip, provisioned_server_port
     if event == _IRQ_CENTRAL_CONNECT:
         conn_handle, _, addr = data
-        print('Connected:', binascii.hexlify(addr).decode())
+        #print('Connected:', binascii.hexlify(addr).decode())
         connected = True
     elif event == _IRQ_CENTRAL_DISCONNECT:
-        print('Disconnected')
+        #print('Disconnected')
         connected = False
     elif event == _IRQ_GATTS_WRITE:
         conn_handle, value_handle = data
@@ -60,21 +60,21 @@ def ble_irq(event, data):
             if value_handle == ssid_handle:
                 provisioned_ssid = decoded
                 with open('/ssid.txt', 'w') as f: f.write(decoded)
-                print('SSID saved:', decoded)
+                #print('SSID saved:', decoded)
             elif value_handle == pass_handle:
                 provisioned_pass = decoded
                 with open('/pass.txt', 'w') as f: f.write(decoded)
-                print('Password saved')
+                #print('Password saved')
             elif value_handle == server_ip_handle:
                 provisioned_server_ip = decoded
                 with open('/server_ip.txt', 'w') as f: f.write(decoded)
-                print('Server IP saved:', decoded)
+                #print('Server IP saved:', decoded)
             elif value_handle == server_port_handle:
                 provisioned_server_port = decoded
                 with open('/server_port.txt', 'w') as f: f.write(decoded)
-                print('Server port saved:', decoded)
+                #print('Server port saved:', decoded)
         except Exception as e:
-            print('IRQ error:', e)
+            #print('IRQ error:', e)
 
 ble.irq(ble_irq)
 
@@ -88,60 +88,60 @@ def register_services():
     )
     handles = ble.gatts_register_services([(_SERVICE_UUID, chars)])[0]
     ssid_handle, pass_handle, server_ip_handle, server_port_handle = handles
-    print('Services registered')
+    #print('Services registered')
 
 register_services()
-print('Ready - starting advertising')
+#print('Ready - starting advertising')
 gc.collect()
 
 async def connect_wifi(ssid, password):
-    print('Free memory before WiFi:', gc.mem_free())
+    #print('Free memory before WiFi:', gc.mem_free())
     sta = network.WLAN(network.STA_IF)
     if sta.isconnected():
-        print('Already connected:', sta.ifconfig()[0])
+        #print('Already connected:', sta.ifconfig()[0])
         return True
     sta.active(True)
     sta.connect(ssid, password)
-    print(f'Connecting to WiFi "{ssid}"...')
+    #print(f'Connecting to WiFi "{ssid}"...')
     for _ in range(30):
         if sta.isconnected():
             ip = sta.ifconfig()[0]
-            print('WiFi connected:', ip)
+            #print('WiFi connected:', ip)
             return True
         await asyncio.sleep(1)
-    print('WiFi failed')
+    #print('WiFi failed')
     return False
 
 async def download_secondary():
     url = f'http://{provisioned_server_ip}/secondary.mpy'   # ← THIS IS THE ONLY CHANGE
-    print(f'Downloading from {url}')
-    print('Free memory before download:', gc.mem_free())
+    #print(f'Downloading from {url}')
+    #print('Free memory before download:', gc.mem_free())
     for attempt in range(5):
         try:
             resp = urequests.get(url, timeout=15)
             if resp.status_code == 200:
                 with open('/secondary.mpy', 'wb') as f:
                     f.write(resp.content)
-                print('Downloaded secondary.mpy (' + str(len(resp.content)) + ' bytes)')
+                #print('Downloaded secondary.mpy (' + str(len(resp.content)) + ' bytes)')
                 return True
         except Exception as e:
-            print('Download error:', e)
+            #print('Download error:', e)
         await asyncio.sleep(5)
-    print('Download failed')
+    #print('Download failed')
     return False
 
 async def run_secondary():
     if await download_secondary():
         gc.collect()
-        print('Free memory before import:', gc.mem_free())
+        #print('Free memory before import:', gc.mem_free())
         try:
             import secondary
-            print('secondary.mpy running')
+            #print('secondary.mpy running')
         except Exception as e:
-            print('Import failed:', e)
+            #print('Import failed:', e)
             import sys
             sys.print_exception(e)
-            print('Free memory after failed import:', gc.mem_free())
+            #print('Free memory after failed import:', gc.mem_free())
 
 async def advertise_and_provision():
     global connected
@@ -157,22 +157,22 @@ async def advertise_and_provision():
 
     while True:
         ble.gap_advertise(100_000, adv_data=adv_data, resp_data=resp_data, connectable=True)
-        print('Advertising - scan for XH-C2X')
+        #print('Advertising - scan for XH-C2X')
         while not connected:
             await asyncio.sleep_ms(100)
 
-        print('Connected - waiting for credentials...')
+        #print('Connected - waiting for credentials...')
         start = time.ticks_ms()
         while time.ticks_diff(time.ticks_ms(), start) < 30000:
             if provisioned_ssid and provisioned_pass:
-                print('Full credentials received! Proceeding to WiFi...')
+                #print('Full credentials received! Proceeding to WiFi...')
                 ble.gap_advertise(None)  # Stop advertising immediately
                 if await connect_wifi(provisioned_ssid, provisioned_pass):
                     await run_secondary()
                 return  # Exit loop - secondary takes over forever
             await asyncio.sleep_ms(100)
 
-        print('Timeout - no full credentials')
+        #print('Timeout - no full credentials')
         ble.gap_advertise(None)
 
         # Optional: wait for disconnect before re-advertising
@@ -182,7 +182,7 @@ async def advertise_and_provision():
 async def main():
     global provisioned_ssid, provisioned_pass, provisioned_server_ip, provisioned_server_port
     gc.collect()
-    print('Free memory at start:', gc.mem_free())
+    #print('Free memory at start:', gc.mem_free())
     try:
         provisioned_ssid = open('/ssid.txt').read().strip()
     except OSError: pass
@@ -197,7 +197,7 @@ async def main():
     except OSError: pass
 
     if provisioned_ssid and provisioned_pass:
-        print('Saved credentials found - connecting directly')
+        #print('Saved credentials found - connecting directly')
         if await connect_wifi(provisioned_ssid, provisioned_pass):
             await run_secondary()
             return
