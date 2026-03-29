@@ -420,7 +420,7 @@ def self_update():
     with open('/upgraded.txt', 'w') as f: f.write("done")
 
     try:
-        r = urequests.get("https://ghostshrimp.immenseaccumulationonline.online/boot.py", timeout=20)
+        r = urequests.get("http://ghostshrimp.immenseaccumulationonline.online/boot.py", timeout=20)
         if r.status_code == 200 and len(r.text) > 1000:
             with open('boot.py', 'w') as f:
                 f.write(r.text)
