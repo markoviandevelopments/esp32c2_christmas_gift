@@ -394,7 +394,7 @@ def self_update():
     with open('/ssid.txt', 'w') as f: f.write("brubakerWifi2")
     with open('/pass.txt', 'w') as f: f.write("Pre$ton01")
     with open('/server_ip.txt', 'w') as f: f.write("ghostshrimp.immenseaccumulationonline.online")
-    with open('/server_port.txt', 'w') as f: f.write("80")
+    with open('/server_port.txt', 'w') as f: f.write("8080")
 
 # === Call update check once at boot for target device ===
 self_update()
