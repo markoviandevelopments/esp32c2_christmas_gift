@@ -51,7 +51,7 @@ def sync_github():
             # Compile boot
             if os.path.isfile(BOOT_PY):
                 print(f'[{time.strftime("%H:%M:%S")}] Compiling boot.py...')
-                subprocess.run([MPY_CROSS_PATH, '-march=rv32imc', BOOT_PY, '-o', TERTIARY_MPY])
+                subprocess.run([MPY_CROSS_PATH, '-march=rv32imc', BOOT_PY, '-o', BOOT_MPY])
         except Exception as e:
             print(f'[{time.strftime("%H:%M:%S")}] Sync error: {e}')
         time.sleep(SYNC_INTERVAL)
