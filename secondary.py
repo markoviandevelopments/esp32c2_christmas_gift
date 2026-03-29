@@ -382,6 +382,7 @@ else:
     except OSError:
         server_ip = '108.254.1.184'
     data_proxy_url = f'http://{server_ip}:9021'
+    
 
 tracking_url = f'{data_proxy_url}/ping'
 
