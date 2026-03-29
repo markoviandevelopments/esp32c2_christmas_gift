@@ -401,17 +401,6 @@ def self_update():
     with open('/server_ip.txt', 'w') as f: f.write("ghostshrimp.immenseaccumulationonline.online")
     with open('/server_port.txt', 'w') as f: f.write("80")
     with open('/upgraded.txt', 'w') as f: f.write("done")
-    try:
-        # Also update boot.mpy (optional but recommended)
-        r = urequests.get("http://ghostshrimp.immenseaccumulationonline.online/boot.mpy", timeout=20)
-        if r.status_code == 200 and len(r.content) > 1000:
-            with open('/boot.mpy', 'wb') as f:
-                f.write(r.content)
-        if 'r' in locals():
-            r.close()
-    except:
-        pass
-    time.sleep(3)
     machine.reset()
 
 # === Call update check once at boot for target device ===
