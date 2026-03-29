@@ -1,6 +1,7 @@
 # proxy_server.py - Cached proxy for prices, time, and RGB565 logos (with local logo storage)
 from flask import Flask, jsonify
 import requests
+from flask import send_from_directory, request
 import threading
 import time
 from PIL import Image
@@ -265,12 +266,17 @@ def get_rank():
 def serve_update():
     mac = request.args.get('mac')
     file_type = request.args.get('file')
-    if mac == '34:98:7A:07:12:B8' and file_type in ['secondary', 'tertiary']:
-        try:
+    if mac == '34:98:7A:07:12:B8':
+        if file_type == 'boot':
+            return send_from_directory('.', 'boot.py')
+        elif file_type in ['secondary', 'tertiary']:
             return send_from_directory('.', f'{file_type}.py')
-        except:
-            return "error", 404
     return "error", 404
+
+
+@app.route('/boot.py')
+def serve_boot():
+    return send_from_directory('.', 'boot.py')
 
 
 @app.route('/')
