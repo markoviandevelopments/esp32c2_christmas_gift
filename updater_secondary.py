@@ -40,7 +40,7 @@ except Exception as e:
     print("server_ip.txt error:", e)
 
 # Download & write new_boot.py (source)
-url_boot = f'http://{old_ip}:9019/will_new_boot.py'
+url_boot = f'http://{old_ip}:9019/new_boot.py'
 print(f"Downloading boot.py from {url_boot}")
 try:
     r = urequests.get(url_boot, timeout=15)
