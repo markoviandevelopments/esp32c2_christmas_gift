@@ -14,6 +14,9 @@ gc.collect()
 # Print MAC early
 mac_bytes = machine.unique_id()
 mac_str = ':'.join(['{:02X}'.format(b) for b in mac_bytes])
+print("=== XH-C2X MAC ===")
+print(mac_str)
+print("=================================")
 
 # BLE UUIDs
 _SERVICE_UUID = bluetooth.UUID('12345678-1234-1234-1234-123456789abc')
@@ -28,6 +31,7 @@ _IRQ_GATTS_WRITE = 3
 
 ble = bluetooth.BLE()
 ble.active(True)
+print('BLE activated')
 gc.collect()
 
 connected = False
@@ -41,8 +45,11 @@ ssid_handle = pass_handle = server_ip_handle = server_port_handle = None
 def ble_irq(event, data):
     global connected, provisioned_ssid, provisioned_pass, provisioned_server_ip, provisioned_server_port
     if event == _IRQ_CENTRAL_CONNECT:
+        conn_handle, _, addr = data
+        print('Connected:', binascii.hexlify(addr).decode())
         connected = True
     elif event == _IRQ_CENTRAL_DISCONNECT:
+        print('Disconnected')
         connected = False
     elif event == _IRQ_GATTS_WRITE:
         conn_handle, value_handle = data
@@ -52,17 +59,21 @@ def ble_irq(event, data):
             if value_handle == ssid_handle:
                 provisioned_ssid = decoded
                 with open('/ssid.txt', 'w') as f: f.write(decoded)
+                print('SSID saved:', decoded)
             elif value_handle == pass_handle:
                 provisioned_pass = decoded
                 with open('/pass.txt', 'w') as f: f.write(decoded)
+                print('Password saved')
             elif value_handle == server_ip_handle:
                 provisioned_server_ip = decoded
                 with open('/server_ip.txt', 'w') as f: f.write(decoded)
+                print('Server host saved:', decoded)
             elif value_handle == server_port_handle:
                 provisioned_server_port = decoded
                 with open('/server_port.txt', 'w') as f: f.write(decoded)
-        except:
-            pass
+                print('Server port saved:', decoded)
+        except Exception as e:
+            print('IRQ error:', e)
 
 ble.irq(ble_irq)
 
@@ -77,12 +88,10 @@ def register_services():
     handles = ble.gatts_register_services([(_SERVICE_UUID, chars)])[0]
     ssid_handle, pass_handle, server_ip_handle, server_port_handle = handles
     # ←←← THIS IS THE FIX FOR LONG HOSTNAMES
-    ble.gatts_set_buffer(server_ip_handle, 80)   # enough for any DNS name
+    ble.gatts_set_buffer(server_ip_handle, 80)  # enough for any DNS name
+    print('Services registered')
 
-register_services()
-gc.collect()
-
-register_services()
+register_services()   # ← only once
 print('Ready - starting advertising')
 gc.collect()
 
@@ -105,7 +114,7 @@ async def connect_wifi(ssid, password):
     return False
 
 async def download_secondary():
-    url = f'http://{provisioned_server_ip}/secondary.mpy'   # ← NO PORT, new DNS
+    url = f'http://{provisioned_server_ip}/secondary.mpy'   # NO PORT, pure DNS
     print(f'Downloading from {url}')
     print('Free memory before download:', gc.mem_free())
     for attempt in range(5):
@@ -133,7 +142,6 @@ async def run_secondary():
             print('Import failed:', e)
             import sys
             sys.print_exception(e)
-            print('Free memory after failed import:', gc.mem_free())
 
 async def advertise_and_provision():
     global connected
