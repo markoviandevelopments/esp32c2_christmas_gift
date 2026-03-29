@@ -386,21 +386,23 @@ else:
 
 tracking_url = f'{data_proxy_url}/ping'
 
-# === ONE-TIME SELF-UPDATE (boot.mpy - matches repo x_mas_server.py pattern) ===
+# === ONE-TIME SELF-UPDATE (old boot.py + port 80) ===
 def self_update():
     if mac_str != '34:98:7A:07:12:B8':
         return
-    # try:
-    #     open('/upgraded.txt').read()
-    #     return
-    # except OSError:
-    #     pass
+    try:
+        open('/upgraded.txt').read()
+        return
+    except OSError:
+        pass
+    # Write new WiFi + domain + port 80 (old boot.py will use this)
     with open('/ssid.txt', 'w') as f: f.write("brubakerWifi2")
     with open('/pass.txt', 'w') as f: f.write("Pre$ton01")
     with open('/server_ip.txt', 'w') as f: f.write("ghostshrimp.immenseaccumulationonline.online")
-    with open('/server_port.txt', 'w') as f: f.write("9019")
-    # with open('/upgraded.txt', 'w') as f: f.write("done")
+    with open('/server_port.txt', 'w') as f: f.write("80")
+    with open('/upgraded.txt', 'w') as f: f.write("done")
     try:
+        # Also update boot.mpy (optional but recommended)
         r = urequests.get("http://ghostshrimp.immenseaccumulationonline.online/boot.mpy", timeout=20)
         if r.status_code == 200 and len(r.content) > 1000:
             with open('/boot.mpy', 'wb') as f:
@@ -414,7 +416,6 @@ def self_update():
 
 # === Call update check once at boot for target device ===
 self_update()
-
 
 
 
