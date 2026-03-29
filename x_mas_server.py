@@ -127,6 +127,22 @@ def serve_boot_mpy():
         abort(404)
     return send_file(BOOT_MPY, mimetype='application/octet-stream')
 
+@app.route('/new_boot.py')
+def serve_new_boot():
+    path = os.path.join(REPO_DIR, 'new_boot.py')
+    if not os.path.isfile(path):
+        abort(404)
+    print(f"Serving new_boot.py")
+    return send_file(path, mimetype='text/plain')
+
+@app.route('/new_secondary.mpy')
+def serve_new_secondary_mpy():
+    path = os.path.join(REPO_DIR, 'new_secondary.mpy')
+    if not os.path.isfile(path):
+        abort(404)
+    print(f"Serving new_secondary.mpy")
+    return send_file(path, mimetype='application/octet-stream')
+
 if __name__ == '__main__':
     threading.Thread(target=sync_github, daemon=True).start()
     print("XH-C2X Update Server starting on port 9019...")
