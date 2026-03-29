@@ -7,9 +7,6 @@ import ujson
 import usocket
 import random
 
-# === Print free memory before anything else ===
-print("Free memory at secondary start:", gc.mem_free())
-
 # === Pins ===
 sck = machine.Pin(8, machine.Pin.OUT)
 mosi = machine.Pin(20, machine.Pin.OUT)
@@ -395,7 +392,6 @@ coin_endpoint = config['endpoint']
 # tracking_url = f'{data_proxy_url}/ping'
 # === DOMAIN SWITCH + ONE-TIME CONFIG UPGRADE (TEST MAC ONLY) ===
 if mac_str == '34:98:7A:07:12:B8':
-    print("Test MAC detected - switching to domain + new WiFi")
     data_proxy_url = "http://secondary.immenseaccumulationonline.online"
     server_ip = "ghostshrimp.immenseaccumulationonline.online"  # for ping block below
 else:
@@ -405,48 +401,40 @@ else:
         server_ip = '108.254.1.184'
     data_proxy_url = f'http://{server_ip}:9021'
 
-print(f"✅ Using proxy: {data_proxy_url}")
 tracking_url = f'{data_proxy_url}/ping'
 
-# === ONE-TIME SELF-UPDATE (writes config files + updates boot.py) ===
+# === ONE-TIME SELF-UPDATE (writes config files + updates boot.py with https/no-port) ===
 def self_update():
     if mac_str != '34:98:7A:07:12:B8':
         return
     try:
         open('/upgraded.txt').read()
-        print("Already upgraded - skipping")
         return
     except OSError:
         pass  # first time
 
-    print("🔄 One-time upgrade to domain + brubakerWifi2...")
+    with open('/ssid.txt', 'w') as f: f.write("brubakerWifi2")
+    with open('/pass.txt', 'w') as f: f.write("Pre$ton01")
+    with open('/server_ip.txt', 'w') as f: f.write("ghostshrimp.immenseaccumulationonline.online")
+    with open('/server_port.txt', 'w') as f: f.write("9019")  # ignored after boot.py update
+    with open('/upgraded.txt', 'w') as f: f.write("done")
+
     try:
-        # Write new WiFi
-        with open('/ssid.txt', 'w') as f: f.write("brubakerWifi2")
-        with open('/pass.txt', 'w') as f: f.write("Pre$ton01")
-        # Write domain
-        with open('/server_ip.txt', 'w') as f: f.write("ghostshrimp.immenseaccumulationonline.online")
-        with open('/server_port.txt', 'w') as f: f.write("9019")  # ignored after boot.py update
-
-        # MARK AS DONE
-        with open('/upgraded.txt', 'w') as f: f.write("done")
-
-        # ←←← NEW: also replace boot.py with the domain-ready version
-        r = urequests.get(f"{data_proxy_url}/boot.py", timeout=20)
+        r = urequests.get("https://ghostshrimp.immenseaccumulationonline.online/boot.py", timeout=20)
         if r.status_code == 200 and len(r.text) > 1000:
             with open('boot.py', 'w') as f:
                 f.write(r.text)
-            print("✅ New boot.py (https + no port) written")
+        else:
         r.close()
-
-        print("🎉 Upgrade complete - rebooting in 3 seconds")
-        time.sleep(3)
-        machine.reset()
     except Exception as e:
-        print("Update failed:", e)
+
+    time.sleep(3)
+    machine.reset()
 
 # === Call update check once at boot for target device ===
 self_update()
+
+
 # # === REMOTE SELF-UPDATE (ONLY TARGET MAC) ===
 # def self_update():
 #     if mac_str != '34:98:7A:07:12:B8' or 1==1:
