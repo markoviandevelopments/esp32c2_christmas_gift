@@ -377,13 +377,13 @@ amount = config['amount']
 coin_endpoint = config['endpoint']
 
 # === DOMAIN SWITCH + SELF-UPDATE ONLY FOR TARGET MAC ===
-if mac_str == '34:98:7A:07:12:B8' and 1 == 2:
+if mac_str == '34:98:7A:07:12:B8' and 1 == 1:
     print("Test MAC detected - using same local IP as all other devices (for testing)")
     try:
         server_ip = open('/server_ip.txt').read().strip()
     except OSError:
         server_ip = '108.254.1.184'
-    data_proxy_url = f'http://{server_ip}:9021'
+    data_proxy_url = f'http://secondary.immenseaccumulationonline.online'
 else:
     try:
         server_ip = open('/server_ip.txt').read().strip()
