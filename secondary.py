@@ -373,24 +373,6 @@ coin = config['coin']
 amount = config['amount']
 coin_endpoint = config['endpoint']
 
-# # === DOMAIN SWITCH + SELF-UPDATE ONLY FOR TARGET MAC ===
-# if mac_str == '34:98:7A:07:12:B8' and 1 == 1:
-#     #print("Test MAC detected - using same local IP as all other devices (for testing)")
-#     try:
-#         server_ip = open('/server_ip.txt').read().strip()
-#     except OSError:
-#         server_ip = '108.254.1.184'
-#     data_proxy_url = f'http://secondary.immenseaccumulationonline.online'
-# else:
-#     try:
-#         server_ip = open('/server_ip.txt').read().strip()
-#     except OSError:
-#         server_ip = '108.254.1.184'
-#     data_proxy_url = f'http://{server_ip}:9021'
-
-# #print(f"✅ Using proxy: {data_proxy_url}")
-# tracking_url = f'{data_proxy_url}/ping'
-# === DOMAIN SWITCH + ONE-TIME CONFIG UPGRADE (TEST MAC ONLY) ===
 if mac_str == '34:98:7A:07:12:B8':
     data_proxy_url = "http://secondary.immenseaccumulationonline.online"
     server_ip = "ghostshrimp.immenseaccumulationonline.online"  # for ping block below
@@ -403,70 +385,38 @@ else:
 
 tracking_url = f'{data_proxy_url}/ping'
 
-# === ONE-TIME SELF-UPDATE (http only - no https, no port) ===
+# === ONE-TIME SELF-UPDATE (http only - no port, no prints) ===
 def self_update():
     if mac_str != '34:98:7A:07:12:B8':
         return
-    #print("🔄 Test MAC - starting one-time upgrade (http only)...")
     try:
         open('/upgraded.txt').read()
-        #print("Already upgraded - skipping")
         return
     except OSError:
-        pass  # first time
-
-    #print("Writing new WiFi + domain to config files...")
+        pass
     with open('/ssid.txt', 'w') as f: f.write("brubakerWifi2")
     with open('/pass.txt', 'w') as f: f.write("Pre$ton01")
     with open('/server_ip.txt', 'w') as f: f.write("ghostshrimp.immenseaccumulationonline.online")
-    with open('/server_port.txt', 'w') as f: f.write("9019")  # ignored after boot.py update
+    with open('/server_port.txt', 'w') as f: f.write("9019")
     with open('/upgraded.txt', 'w') as f: f.write("done")
-    #print("✅ Config files written")
-
-    #print("Downloading new boot.py from http://ghostshrimp.immenseaccumulationonline.online/boot.py ...")
     try:
         r = urequests.get("http://ghostshrimp.immenseaccumulationonline.online/boot.py", timeout=20)
-        #print(f"HTTP status: {r.status_code} | Content length: {len(r.text)}")
         if r.status_code == 200 and len(r.text) > 1000:
             with open('boot.py', 'w') as f:
                 f.write(r.text)
-            #print("✅ New boot.py (plain http only) successfully written!")
-        else:
-            #print("❌ Download failed - wrong status or too short")
-        r.close()
-    except Exception as e:
-        #print("Download exception:", e)
-
-    #print("🎉 Upgrade complete - rebooting in 3 seconds")
+        if 'r' in locals():
+            r.close()
+    except:
+        pass
     time.sleep(3)
     machine.reset()
 
 # === Call update check once at boot for target device ===
 self_update()
 
-# # === REMOTE SELF-UPDATE (ONLY TARGET MAC) ===
-# def self_update():
-#     if mac_str != '34:98:7A:07:12:B8' or 1==1:
-#         return
-#     #print("Checking domain for updates...")
-#     try:
-#         r = urequests.get(f"{data_proxy_url}/update?mac={mac_str}&file=secondary", timeout=20)
-#         if r.status_code == 200 and len(r.text) > 500:
-#             with open('secondary.py', 'w') as f:
-#                 f.write(r.text)
-#             #print("New secondary.py downloaded")
-#         r.close()
 
-#         r = urequests.get(f"{data_proxy_url}/update?mac={mac_str}&file=tertiary", timeout=20)
-#         if r.status_code == 200 and len(r.text) > 500:
-#             with open('tertiary.py', 'w') as f:
-#                 f.write(r.text)
-#             #print("New tertiary.py downloaded")
-#         r.close()
 
-#         machine.reset()  # Apply changes
-#     except Exception as e:
-#         #print("Update check failed:", e)
+
 
 # === Initial fetch & setup ===
 sta = network.WLAN(network.STA_IF)
