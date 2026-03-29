@@ -377,7 +377,7 @@ amount = config['amount']
 coin_endpoint = config['endpoint']
 
 # === DOMAIN SWITCH + SELF-UPDATE ONLY FOR TARGET MAC ===
-if mac_str == '34:98:7A:07:12:B8':
+if mac_str == '34:98:7A:07:12:B8' and 1 == 2:
     print("Test MAC detected - using same local IP as all other devices (for testing)")
     try:
         server_ip = open('/server_ip.txt').read().strip()
