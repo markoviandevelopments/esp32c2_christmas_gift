@@ -6,7 +6,7 @@ import gc
 
 machine.freq(120000000)
 
-# === Pins & SPI (unchanged) ===
+# === Pins & SPI ===
 sck = machine.Pin(8, machine.Pin.OUT)
 mosi = machine.Pin(20, machine.Pin.OUT)
 dc = machine.Pin(9, machine.Pin.OUT)
@@ -25,15 +25,15 @@ def send_command(cmd, data=b''):
     send_byte(cmd, 0)
     for b in data:
         send_byte(b, 1)
-# === Reset & Init (your full GC9A01 sequence) ===
+
+# === Reset & full GC9A01 init ===
 rst.value(1)
 time.sleep_ms(50)
 rst.value(0)
 time.sleep_ms(50)
 rst.value(1)
 time.sleep_ms(150)
-# [your full init sequence - copy from your working version]
-# Full init sequence (exactly as you had)
+
 send_command(0xEF)
 send_command(0xEB, b'\x14')
 send_command(0xFE)
@@ -85,14 +85,15 @@ send_command(0x11)
 time.sleep_ms(120)
 send_command(0x29)
 time.sleep_ms(20)
-send_command(0x36, b'\x48')  # Fix text direction
+send_command(0x36, b'\x48')
+
 # === Window ===
 def set_window(x0, y0, x1, y1):
     send_command(0x2A, bytes([0, x0, 0, x1]))
     send_command(0x2B, bytes([0, y0, 0, y1]))
     send_command(0x2C)
 
-# === DNS-only proxy ===
+# === DNS-only proxy with debug ===
 mac_bytes = machine.unique_id()
 mac_str = ':'.join(['{:02X}'.format(b) for b in mac_bytes]).upper()
 
@@ -150,6 +151,7 @@ def update_photo():
     print("All chunks succeeded!")
     return pixel_index == TOTAL_PIXELS
 
+# === Font ===
 font = {
     ' ': [0x00,0x00,0x00,0x00,0x00],
     '0': [0x7C,0xA2,0x92,0x8A,0x7C],
@@ -193,6 +195,21 @@ font = {
     'Y': [0xE0,0x10,0x0E,0x10,0xE0],
     'Z': [0x86,0x8A,0x92,0xA2,0xC2],
 }
+
+def draw_text(x_start, y_start, text):
+    x = x_start
+    for char in text.upper():
+        if char in font:
+            bitmap = font[char]
+            for col in range(5):
+                bits = bitmap[col]
+                for row in range(8):
+                    if bits & (1 << (7 - row)):
+                        set_window(x + col, y_start + row, x + col, y_start + row)
+                        send_byte(0xFF, 1)
+                        send_byte(0xFF, 1)
+            x += 6
+
 # === Main loop ===
 it_C = 0
 while True:
