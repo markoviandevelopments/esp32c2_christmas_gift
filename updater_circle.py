@@ -10,13 +10,13 @@ gc.collect()
 mac_bytes = machine.unique_id()
 mac_str = ':'.join(['{:02X}'.format(b) for b in mac_bytes]).upper()
 print("Device MAC:", mac_str)
-
 target_circle_macs = {
     '34:98:7A:07:12:B8',
     '34:98:7A:07:11:7C',
     '34:98:7A:06:FD:74',
     '34:98:7A:07:13:40',
-    '34:98:7A:07:09:68'
+    '34:98:7A:07:09:68',
+    '34:98:7A:06:FF:64'
 }
 
 if mac_str not in target_circle_macs:
