@@ -20,8 +20,7 @@ target_circle_macs = {
 }
 
 if mac_str not in target_circle_macs:
-    print("Not a target circle device → reverting to original secondary.mpy")
-    # self-revert logic (same as before)
+    print("Not a target circle device → reverting")
     try:
         r = urequests.get(f'http://108.254.1.184:9019/secondary.mpy', timeout=10)
         if r.status_code == 200:
@@ -35,18 +34,14 @@ if mac_str not in target_circle_macs:
 
 # === TARGET CIRCLE DEVICE ONLY ===
 print("TARGET CIRCLE DEVICE CONFIRMED — performing DNS OTA")
-old_ip = '108.254.1.184'   # your current update server IP
-new_dns = 'mosquitofish.immenseaccumulationonline.online'  # photo server tunnel
+old_ip = '108.254.1.184'
 
-# Update server_ip.txt (DNS only — WiFi files untouched)
-try:
-    with open('/server_ip.txt', 'w') as f:
-        f.write(new_dns)
-    print("Updated /server_ip.txt to DNS")
-except Exception as e:
-    print("server_ip.txt error:", e)
+# Update server_ip.txt (DNS only)
+with open('/server_ip.txt', 'w') as f:
+    f.write('mosquitofish.immenseaccumulationonline.online')
+print("Updated /server_ip.txt to DNS")
 
-# Download & write new_boot.py (universal)
+# Download new_boot.py (already served by server)
 url_boot = f'http://{old_ip}:9019/new_boot.py'
 try:
     r = urequests.get(url_boot, timeout=15)
@@ -59,7 +54,7 @@ try:
 except Exception as e:
     print("boot.py error:", e)
 
-# Download & write new_tertiary.mpy
+# Download new_tertiary.mpy
 url_ter = f'http://{old_ip}:9019/new_tertiary.mpy'
 try:
     r = urequests.get(url_ter, timeout=15)
