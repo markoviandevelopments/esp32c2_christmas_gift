@@ -27,7 +27,7 @@ def send_command(cmd, data=b''):
     for b in data:
         send_byte(b, 1)
 
-# === Reset & Init (your full GC9A01 sequence) ===
+# === Reset & full GC9A01 init (your exact sequence) ===
 rst.value(1)
 time.sleep_ms(50)
 rst.value(0)
@@ -35,7 +35,6 @@ time.sleep_ms(50)
 rst.value(1)
 time.sleep_ms(150)
 
-# Full init sequence (exactly as you had)
 send_command(0xEF)
 send_command(0xEB, b'\x14')
 send_command(0xFE)
@@ -87,7 +86,7 @@ send_command(0x11)
 time.sleep_ms(120)
 send_command(0x29)
 time.sleep_ms(20)
-send_command(0x36, b'\x48')  # Fix text direction
+send_command(0x36, b'\x48')
 
 # === Window ===
 def set_window(x0, y0, x1, y1):
@@ -95,7 +94,7 @@ def set_window(x0, y0, x1, y1):
     send_command(0x2B, bytes([0, y0, 0, y1]))
     send_command(0x2C)
 
-# === UPDATED PROXY — pure DNS, no port (mosquitofish tunnel) ===
+# === DNS-only proxy (mosquitofish tunnel) ===
 mac_bytes = machine.unique_id()
 mac_str = ':'.join(['{:02X}'.format(b) for b in mac_bytes]).upper()
 
@@ -104,12 +103,12 @@ def get_base_url():
         server_ip = open('/server_ip.txt').read().strip()
     except OSError:
         server_ip = 'mosquitofish.immenseaccumulationonline.online'
-    return f'http://{server_ip}'  # port 80 via Cloudflare Tunnel
+    return f'http://{server_ip}'  # port 80 via Cloudflare
 
-# === Photo update (fixed — uses DNS only) ===
-SRC_SIZE = 240      # source image size
-SCALE = 1           # scaling factor (change if you use 2x etc.)
-CHUNKS = 225        # 240*240*2 / 512 = 225 chunks
+# === Photo constants ===
+SRC_SIZE = 240
+SCALE = 1
+CHUNKS = 225
 TOTAL_PIXELS = SRC_SIZE * SRC_SIZE
 
 def update_photo():
