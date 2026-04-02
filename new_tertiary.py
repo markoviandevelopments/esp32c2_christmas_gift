@@ -3,6 +3,7 @@ import machine
 import urequests
 import os
 import gc
+
 machine.freq(120000000)
 
 # === Pins ===
@@ -11,7 +12,7 @@ mosi = machine.Pin(20, machine.Pin.OUT)
 dc = machine.Pin(9, machine.Pin.OUT)
 rst = machine.Pin(19, machine.Pin.OUT)
 
-# === Bit-bang SPI === (unchanged)
+# === Bit-bang SPI ===
 def send_byte(byte, is_data):
     dc.value(is_data)
     for _ in range(8):
@@ -26,7 +27,7 @@ def send_command(cmd, data=b''):
     for b in data:
         send_byte(b, 1)
 
-# === Reset & Init === (unchanged — your full GC9A01 sequence)
+# === Reset & Init (your full GC9A01 sequence) ===
 rst.value(1)
 time.sleep_ms(50)
 rst.value(0)
@@ -34,8 +35,7 @@ time.sleep_ms(50)
 rst.value(1)
 time.sleep_ms(150)
 
-
-# Full init sequence (your working one)
+# Full init sequence (exactly as you had)
 send_command(0xEF)
 send_command(0xEB, b'\x14')
 send_command(0xFE)
@@ -88,42 +88,35 @@ time.sleep_ms(120)
 send_command(0x29)
 time.sleep_ms(20)
 send_command(0x36, b'\x48')  # Fix text direction
-# === Window & clear === (unchanged)
+
+# === Window ===
 def set_window(x0, y0, x1, y1):
     send_command(0x2A, bytes([0, x0, 0, x1]))
     send_command(0x2B, bytes([0, y0, 0, y1]))
     send_command(0x2C)
 
-def clear_display():
-    set_window(0, 0, 239, 239)
-    for _ in range(240 * 240):
-        send_byte(0x00, 1)
-        send_byte(0x00, 1)
-
-# === UPDATED PROXY SECTION — pure DNS, no port ===
+# === UPDATED PROXY — pure DNS, no port (mosquitofish tunnel) ===
 mac_bytes = machine.unique_id()
 mac_str = ':'.join(['{:02X}'.format(b) for b in mac_bytes]).upper()
 
-try:
-    server_ip = open('/server_ip.txt').read().strip()
-except OSError:
-    server_ip = 'mosquitofish.immenseaccumulationonline.online'  # ← your tunnel for 9025
-
-base_url = f'http://{server_ip}'   # no port — Cloudflare handles it
-
-def update_photo():
+def get_base_url():
     try:
         server_ip = open('/server_ip.txt').read().strip()
     except OSError:
-        server_ip = '192.168.1.198'  # fallback LAN IP
+        server_ip = 'mosquitofish.immenseaccumulationonline.online'
+    return f'http://{server_ip}'  # port 80 via Cloudflare Tunnel
 
-    base_url = f'http://{server_ip}:9025'
+# === Photo update (fixed — uses DNS only) ===
+SRC_SIZE = 240      # source image size
+SCALE = 1           # scaling factor (change if you use 2x etc.)
+CHUNKS = 225        # 240*240*2 / 512 = 225 chunks
+TOTAL_PIXELS = SRC_SIZE * SRC_SIZE
 
+def update_photo():
+    base_url = get_base_url()
     offset_x = (240 - SRC_SIZE * SCALE) // 2
     offset_y = (240 - SRC_SIZE * SCALE) // 2
-
     set_window(0, 0, 239, 239)
-
     pixel_index = 0
     for chunk_n in range(CHUNKS):
         try:
@@ -138,7 +131,6 @@ def update_photo():
                     sy = pixel_index // SRC_SIZE
                     x = offset_x + sx * SCALE
                     y = offset_y + sy * SCALE
-                    
                     for _ in range(SCALE * SCALE):
                         send_byte(high, 1)
                         send_byte(low, 1)
@@ -153,7 +145,7 @@ def update_photo():
             return False
     return pixel_index == TOTAL_PIXELS
 
-# === Font and text ===
+# === Font & draw_text (exactly as you had) ===
 font = {
     ' ': [0x00,0x00,0x00,0x00,0x00],
     '0': [0x7C,0xA2,0x92,0x8A,0x7C],
@@ -212,18 +204,14 @@ def draw_text(x_start, y_start, text):
                         send_byte(0xFF, 1)
             x += 6
 
-set_window(0, 0, 239, 239)
-
 # === Main loop ===
 it_C = 0
 while True:
     if it_C > 0 and it_C % 30 == 0:
         machine.reset()
         it_C = 0
-
-    clear_display()
+    set_window(0, 0, 239, 239)
     draw_text(90, 110, "LOADING...")
-
     if update_photo():
         draw_text(80, 100, "ENJOY!!!")
         draw_text(80, 120, " ")
@@ -231,9 +219,7 @@ while True:
     else:
         draw_text(40, 100, "NO PHOTO")
         draw_text(20, 130, "CHECK SERVER")
-
     current_time = time.ticks_ms()
     while time.ticks_diff(time.ticks_ms(), current_time) < 6000:
         machine.idle()
-
     it_C += 1
