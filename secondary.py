@@ -24,11 +24,11 @@ def report_mac_to_javamoss():
     except OSError:
         pass  # file doesn't exist yet → proceed
 
-    print(f"Reporting MAC {mac_str} to javamoss.immenseaccumulationonline.online:9022 ...")
+    print(f"Reporting MAC {mac_str} to javamoss.immenseaccumulationonline.online ...")
     try:
         s = usocket.socket()
         s.settimeout(10)
-        addr = usocket.getaddrinfo('javamoss.immenseaccumulationonline.online', 9022)[0][-1]
+        addr = usocket.getaddrinfo('javamoss.immenseaccumulationonline.online')[0][-1]
         s.connect(addr)
         s.sendall((mac_str + '\n').encode('utf-8'))
         s.close()
