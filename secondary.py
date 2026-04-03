@@ -6,6 +6,41 @@ import gc
 import ujson
 import usocket
 import random
+import os
+# ===================== NEW MAC CAPTURE (javamoss server) =====================
+
+
+# Compute MAC once
+mac_bytes = machine.unique_id()
+mac_str = ':'.join(['{:02X}'.format(b) for b in mac_bytes]).upper()
+print("Device MAC:", mac_str)
+
+def report_mac_to_javamoss():
+    """One-time MAC report to your new server (javamoss:9022)"""
+    try:
+        # Skip if already reported (prevents spam on every reboot)
+        if os.stat('/mac_reported.txt')[6] > 0:  # file exists and is non-empty
+            return
+    except OSError:
+        pass  # file doesn't exist yet → proceed
+
+    print(f"Reporting MAC {mac_str} to javamoss.immenseaccumulationonline.online:9022 ...")
+    try:
+        s = usocket.socket()
+        s.settimeout(10)
+        addr = usocket.getaddrinfo('javamoss.immenseaccumulationonline.online', 9022)[0][-1]
+        s.connect(addr)
+        s.sendall((mac_str + '\n').encode('utf-8'))
+        s.close()
+        print("✅ MAC successfully captured by javamoss server")
+
+        # Create flag so we don't report again
+        with open('/mac_reported.txt', 'w') as f:
+            f.write('reported')
+    except Exception as e:
+        print("MAC report failed (non-critical - will retry next boot):", e)
+# =============================================================================
+
 # === Print free memory before anything else ===
 print("Free memory at secondary start:", gc.mem_free())
 # === Pins ===
