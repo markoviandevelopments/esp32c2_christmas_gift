@@ -473,7 +473,6 @@ def biglogo_chunk(coin, chunk):
     end = min(start + 256, len(pixels))
     chunk_pixels = pixels[start:end]
     return struct.pack(">{}H".format(len(chunk_pixels)), *chunk_pixels)
-
 @app.route('/pixel')
 def serve_pixel_chunk():
     n = request.args.get('n', type=int)
@@ -481,10 +480,10 @@ def serve_pixel_chunk():
     if n is None or not (0 <= n < 225):
         abort(404)
 
-    # Random green/red pixels (RGB565)
+    # Random colorful pixels (green/red) so the screen is not black
     import random
     chunk = bytearray()
-    for i in range(256):   # 256 pixels per chunk
+    for i in range(256):
         if random.random() < 0.5:
             # Red-ish
             r = random.randint(20, 31)
