@@ -23,12 +23,8 @@ def report_mac_to_javamoss():
         print("✅ MAC successfully captured by javamoss server")
     except Exception as e:
         print("MAC report failed (will retry next boot):", e)
-# =============================================================================
-# Ping server with MAC once
-try:
-    report_mac_to_javamoss()
-except Exception as e:
-    pass
+
+report_mac_to_javamoss()
 
 
 # === Print free memory before anything else ===
