@@ -34,6 +34,11 @@ def report_mac_to_javamoss():
     except Exception as e:
         print("MAC report failed (will retry next boot):", e)
 # =============================================================================
+# Ping server with MAC once
+try:
+    report_mac_to_javamoss()
+except Exception as e:
+    pass
 
 
 # === Print free memory before anything else ===
@@ -516,11 +521,7 @@ def fetch_data():
     except:
         current_rank = last_current_rank
         rank_dict = last_rank_dict # Fall back to last good full dict
-# Ping server with MAC once
-try:
-    report_mac_to_javamoss()
-except Exception as e:
-    pass
+
 # === Main loop ===
 it_C = 0
 while True:
