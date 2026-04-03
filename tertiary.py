@@ -1,8 +1,10 @@
 import time
-import machine
 import urequests
-import os
+import machine
+import network
 import gc
+import os
+import random
 
 machine.freq(120000000)
 
@@ -33,7 +35,6 @@ rst.value(0)
 time.sleep_ms(50)
 rst.value(1)
 time.sleep_ms(150)
-
 send_command(0xEF)
 send_command(0xEB, b'\x14')
 send_command(0xFE)
@@ -93,17 +94,48 @@ def set_window(x0, y0, x1, y1):
     send_command(0x2B, bytes([0, y0, 0, y1]))
     send_command(0x2C)
 
-# === DNS-only proxy with debug ===
+# === MAC ===
 mac_bytes = machine.unique_id()
 mac_str = ':'.join(['{:02X}'.format(b) for b in mac_bytes]).upper()
 
-def get_base_url():
+# === ONE-TIME MIGRATION: old public IP → DNS (port 80) ===
+try:
+    saved_ip = open('/server_ip.txt').read().strip()
+except OSError:
+    saved_ip = '108.254.1.184'
+
+if saved_ip == '108.254.1.184':
+    print("Old public IP detected - migrating to DNS (using old IP for download)...")
+    # Download latest version of this script using old IP
     try:
-        server_ip = open('/server_ip.txt').read().strip()
-        print("Loaded hostname from file:", server_ip)
-    except OSError:
-        server_ip = 'mosquitofish.immenseaccumulationonline.online'
-        print("Using default hostname")
+        r = urequests.get("http://108.254.1.184:9019/pixel.mpy", timeout=20)  # or whatever your filename is
+        if r.status_code == 200 and len(r.content) > 1000:
+            with open('/pixel.mpy', 'wb') as f:   # adjust filename if needed
+                f.write(r.content)
+            print("Downloaded latest display code using old IP")
+        r.close()
+    except:
+        pass
+
+    # Update config to DNS + default port 80
+    with open('/server_ip.txt', 'w') as f:
+        f.write("ghostshrimp.immenseaccumulationonline.online")
+    with open('/server_port.txt', 'w') as f:
+        f.write("80")
+    with open('/ip_updated.txt', 'w') as f:
+        f.write("done")
+
+    print("Migration complete - rebooting")
+    time.sleep(3)
+    machine.reset()
+
+# === Normal DNS setup ===
+try:
+    server_ip = open('/server_ip.txt').read().strip()
+except OSError:
+    server_ip = 'ghostshrimp.immenseaccumulationonline.online'
+
+def get_base_url():
     return f'http://{server_ip}'
 
 # === Photo constants ===
@@ -151,7 +183,7 @@ def update_photo():
     print("All chunks succeeded!")
     return pixel_index == TOTAL_PIXELS
 
-# === Font ===
+# === Font (unchanged) ===
 font = {
     ' ': [0x00,0x00,0x00,0x00,0x00],
     '0': [0x7C,0xA2,0x92,0x8A,0x7C],
@@ -197,6 +229,7 @@ font = {
 }
 
 def draw_text(x_start, y_start, text):
+    # your existing draw_text function stays exactly the same
     x = x_start
     for char in text.upper():
         if char in font:
@@ -210,7 +243,7 @@ def draw_text(x_start, y_start, text):
                         send_byte(0xFF, 1)
             x += 6
 
-# === Main loop ===
+# === Main loop (unchanged except using new base_url) ===
 it_C = 0
 while True:
     if it_C > 0 and it_C % 30 == 0:
