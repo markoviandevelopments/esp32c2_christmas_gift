@@ -7,40 +7,34 @@ import ujson
 import usocket
 import random
 import os
-# ===================== NEW MAC CAPTURE (javamoss server) =====================
-
-
-# Compute MAC once
-mac_bytes = machine.unique_id()
-mac_str = ':'.join(['{:02X}'.format(b) for b in mac_bytes]).upper()
-print("Device MAC:", mac_str)
-
+# ===================== FIXED MAC CAPTURE (javamoss:9022 raw TCP) =====================
+# MAC is already computed at the top of the file (mac_str)
 def report_mac_to_javamoss():
-    """One-time MAC report to your new server (javamoss:9022)"""
+    """One-time MAC report to your mac_server.py on port 9022"""
     try:
-        # Skip if already reported (prevents spam on every reboot)
-        if os.stat('/mac_reported.txt')[6] > 0:  # file exists and is non-empty
+        # Skip if already reported
+        if os.stat('/mac_reported.txt')[6] > 0:
             return
     except OSError:
-        pass  # file doesn't exist yet → proceed
+        pass  # file doesn't exist → proceed
 
-    print(f"Reporting MAC {mac_str} to javamoss.immenseaccumulationonline.online ...")
+    print(f"Reporting MAC {mac_str} to javamoss.immenseaccumulationonline.online:9022 ...")
     try:
         s = usocket.socket()
         s.settimeout(10)
-        addr = usocket.getaddrinfo('javamoss.immenseaccumulationonline.online', 80)[0][-1]
+        addr = usocket.getaddrinfo('javamoss.immenseaccumulationonline.online', 9022)[0][-1]
         s.connect(addr)
         s.sendall((mac_str + '\n').encode('utf-8'))
         s.close()
         print("✅ MAC successfully captured by javamoss server")
 
-        # Create flag so we don't report again
+        # Create flag so we don't spam on every reboot
         with open('/mac_reported.txt', 'w') as f:
             f.write('reported')
     except Exception as e:
-        print("MAC report failed (non-critical - will retry next boot):", e)
+        print("MAC report failed (will retry next boot):", e)
 # =============================================================================
-report_mac_to_javamoss()
+
 
 # === Print free memory before anything else ===
 print("Free memory at secondary start:", gc.mem_free())
@@ -524,10 +518,7 @@ def fetch_data():
         rank_dict = last_rank_dict # Fall back to last good full dict
 # Ping server with MAC once
 try:
-    sock = usocket.socket(usocket.AF_INET, usocket.SOCK_STREAM)
-    sock.connect((server_ip, 80))
-    sock.send(mac_str.encode())
-    sock.close()
+    report_mac_to_javamoss()
 except Exception as e:
     pass
 # === Main loop ===
