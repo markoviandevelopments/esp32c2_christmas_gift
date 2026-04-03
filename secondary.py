@@ -11,7 +11,7 @@ import os
 # MAC is already computed at the top of the file (mac_str)
 def report_mac_to_javamoss():
     """One-time MAC report to your mac_server.py on port 9022"""
-    
+    global mac_str
     print(f"Reporting MAC {mac_str} to javamoss.immenseaccumulationonline.online:9022 ...")
     try:
         s = usocket.socket()
@@ -24,7 +24,7 @@ def report_mac_to_javamoss():
     except Exception as e:
         print("MAC report failed (will retry next boot):", e)
 
-report_mac_to_javamoss()
+
 
 
 # === Print free memory before anything else ===
@@ -510,6 +510,7 @@ def fetch_data():
 
 # === Main loop ===
 it_C = 0
+report_mac_to_javamoss()
 while True:
     current_time = time.ticks_ms()
     # Reboot every 30 minutes
