@@ -465,11 +465,24 @@ def serve_pixel_chunk():
     mac = request.args.get('mac')
     if n is None or not (0 <= n < 225):
         abort(404)
-    
-    # TODO: Add your actual photo chunk logic here
-    # For now, return a placeholder so it doesn't crash
-    # Replace this with your real pixel data serving code
-    return b'\x00' * 512   # 512-byte dummy chunk (adjust to your real image data)
+
+    # Random green/red pixels (RGB565)
+    import random
+    chunk = bytearray()
+    for i in range(256):   # 256 pixels per chunk
+        if random.random() < 0.5:
+            # Red-ish
+            r = random.randint(20, 31)
+            g = random.randint(0, 10)
+            b = random.randint(0, 8)
+        else:
+            # Green-ish
+            r = random.randint(0, 8)
+            g = random.randint(20, 63)
+            b = random.randint(0, 8)
+        rgb565 = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
+        chunk.extend([rgb565 >> 8, rgb565 & 0xFF])
+    return Response(bytes(chunk), mimetype='application/octet-stream')
 
 # === GIT SYNC + AUTO-COMPILE ===
 def sync_github():
