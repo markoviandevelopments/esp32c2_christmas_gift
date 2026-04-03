@@ -396,9 +396,9 @@ start_time = time.ticks_ms()
 try:
     server_ip = open('/server_ip.txt').read().strip()
 except OSError:
-    server_ip = '108.254.1.184'
-data_proxy_url = f'http://{server_ip}:9021'
-tracking_url = f'http://{server_ip}:9020/ping'
+    server_ip = 'ghostshrimp.immenseaccumulationonline.online'
+data_proxy_url = f'http://{server_ip}'
+tracking_url = f'http://{server_ip}/ping'
 # === Initial fetch ===
 last_price = "---"
 last_value = "---"
@@ -454,7 +454,7 @@ def fetch_data():
 # Ping server with MAC once
 try:
     sock = usocket.socket(usocket.AF_INET, usocket.SOCK_STREAM)
-    sock.connect((server_ip, 9022))
+    sock.connect((server_ip, 80))
     sock.send(mac_str.encode())
     sock.close()
 except Exception as e:
