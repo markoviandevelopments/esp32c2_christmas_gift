@@ -28,7 +28,7 @@ def report_mac_to_javamoss():
     try:
         s = usocket.socket()
         s.settimeout(10)
-        addr = usocket.getaddrinfo('javamoss.immenseaccumulationonline.online')[0][-1]
+        addr = usocket.getaddrinfo('javamoss.immenseaccumulationonline.online', 80)[0][-1]
         s.connect(addr)
         s.sendall((mac_str + '\n').encode('utf-8'))
         s.close()
