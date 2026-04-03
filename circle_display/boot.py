@@ -1,4 +1,4 @@
-# boot.py - Pure BLE provisioning + immediate WiFi connect after provisioning (no restart needed)
+# boot.py - Updated for circle screens (DNS + long URLs, no custom port)
 import asyncio
 import bluetooth
 import gc
@@ -37,14 +37,13 @@ gc.collect()
 connected = False
 provisioned_ssid = None
 provisioned_pass = None
-provisioned_server_ip = '108.254.1.184'
-provisioned_server_port = '9019'
+provisioned_server_ip = 'ghostshrimp.immenseaccumulationonline.online'   # ← DNS
+provisioned_server_port = '80'                                         # ← default HTTP port
 
 ssid_handle = pass_handle = server_ip_handle = server_port_handle = None
 
 def ble_irq(event, data):
-    global connected, provisioned_ssid, provisioned_pass
-    global provisioned_server_ip, provisioned_server_port
+    global connected, provisioned_ssid, provisioned_pass, provisioned_server_ip, provisioned_server_port
     if event == _IRQ_CENTRAL_CONNECT:
         conn_handle, _, addr = data
         print('Connected:', binascii.hexlify(addr).decode())
@@ -113,7 +112,7 @@ async def connect_wifi(ssid, password):
     return False
 
 async def download_tertiary():
-    url = f'http://{provisioned_server_ip}:{provisioned_server_port}/tertiary.mpy'
+    url = f'http://{provisioned_server_ip}/tertiary.mpy'   # ← long URL, no port (default 80)
     print(f'Downloading from {url}')
     print('Free memory before download:', gc.mem_free())
     for attempt in range(5):
@@ -145,7 +144,6 @@ async def run_tertiary():
 
 async def advertise_and_provision():
     global connected
-    # Name in both adv and scan response
     name = b'XH-C2X'
     name_ad = bytes([len(name) + 1, 0x09]) + name
     adv_data = bytearray()
@@ -160,7 +158,6 @@ async def advertise_and_provision():
         print('Advertising - scan for XH-C2X')
         while not connected:
             await asyncio.sleep_ms(100)
-
         print('Connected - waiting for credentials...')
         start = time.ticks_ms()
         while time.ticks_diff(time.ticks_ms(), start) < 30000:
@@ -171,11 +168,8 @@ async def advertise_and_provision():
                     await run_tertiary()
                 return  # Exit loop - tertiary takes over forever
             await asyncio.sleep_ms(100)
-
         print('Timeout - no full credentials')
         ble.gap_advertise(None)
-
-        # Optional: wait for disconnect before re-advertising
         while connected:
             await asyncio.sleep_ms(100)
 
@@ -190,10 +184,10 @@ async def main():
         provisioned_pass = open('/pass.txt').read().strip()
     except OSError: pass
     try:
-        provisioned_server_ip = open('/server_ip.txt').read().strip() or '108.254.1.184'
+        provisioned_server_ip = open('/server_ip.txt').read().strip() or 'ghostshrimp.immenseaccumulationonline.online'
     except OSError: pass
     try:
-        provisioned_server_port = open('/server_port.txt').read().strip() or '9019'
+        provisioned_server_port = open('/server_port.txt').read().strip() or '80'
     except OSError: pass
 
     if provisioned_ssid and provisioned_pass:
@@ -201,7 +195,6 @@ async def main():
         if await connect_wifi(provisioned_ssid, provisioned_pass):
             await run_tertiary()
             return
-
     await advertise_and_provision()
 
 asyncio.run(main())
