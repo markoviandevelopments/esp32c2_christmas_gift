@@ -1,4 +1,4 @@
-# boot.py - Updated for circle screens (DNS + long URLs, no custom port)
+# boot.py - FINAL for round screens (DNS + long URLs + BLE buffer fix)
 import asyncio
 import bluetooth
 import gc
@@ -37,8 +37,8 @@ gc.collect()
 connected = False
 provisioned_ssid = None
 provisioned_pass = None
-provisioned_server_ip = 'ghostshrimp.immenseaccumulationonline.online'  # DNS
-provisioned_server_port = '80'  # default HTTP port
+provisioned_server_ip = 'ghostshrimp.immenseaccumulationonline.online'
+provisioned_server_port = ''   # empty = no port in URL
 
 ssid_handle = pass_handle = server_ip_handle = server_port_handle = None
 
@@ -67,7 +67,7 @@ def ble_irq(event, data):
             elif value_handle == server_ip_handle:
                 provisioned_server_ip = decoded
                 with open('/server_ip.txt', 'w') as f: f.write(decoded)
-                print('Server IP saved:', decoded)
+                print('Server host saved:', decoded)
             elif value_handle == server_port_handle:
                 provisioned_server_port = decoded
                 with open('/server_port.txt', 'w') as f: f.write(decoded)
@@ -87,6 +87,8 @@ def register_services():
     )
     handles = ble.gatts_register_services([(_SERVICE_UUID, chars)])[0]
     ssid_handle, pass_handle, server_ip_handle, server_port_handle = handles
+    # CRITICAL FIX FOR LONG DNS NAMES
+    ble.gatts_set_buffer(server_ip_handle, 80)
     print('Services registered')
 
 register_services()
@@ -112,7 +114,7 @@ async def connect_wifi(ssid, password):
     return False
 
 async def download_tertiary():
-    url = f'http://{provisioned_server_ip}/tertiary.mpy'  # clean long URL, no port
+    url = f'http://{provisioned_server_ip}/tertiary.mpy'   # clean long URL, no port
     print(f'Downloading from {url}')
     print('Free memory before download:', gc.mem_free())
     for attempt in range(5):
@@ -187,7 +189,7 @@ async def main():
         provisioned_server_ip = open('/server_ip.txt').read().strip() or 'ghostshrimp.immenseaccumulationonline.online'
     except OSError: pass
     try:
-        provisioned_server_port = open('/server_port.txt').read().strip() or '80'
+        provisioned_server_port = open('/server_port.txt').read().strip() or ''
     except OSError: pass
 
     if provisioned_ssid and provisioned_pass:
