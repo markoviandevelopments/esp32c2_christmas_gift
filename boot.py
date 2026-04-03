@@ -113,7 +113,7 @@ async def connect_wifi(ssid, password):
     return False
 
 async def download_secondary():
-    url = f'http://{provisioned_server_ip}:{provisioned_server_port}/secondary.mpy'
+    url = f'http://{provisioned_server_ip}/secondary.mpy'   # no port = default 80
     print(f'Downloading from {url}')
     print('Free memory before download:', gc.mem_free())
     for attempt in range(5):
