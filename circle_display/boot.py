@@ -37,8 +37,8 @@ gc.collect()
 connected = False
 provisioned_ssid = None
 provisioned_pass = None
-provisioned_server_ip = 'ghostshrimp.immenseaccumulationonline.online'   # ← DNS
-provisioned_server_port = '80'                                         # ← default HTTP port
+provisioned_server_ip = 'ghostshrimp.immenseaccumulationonline.online'  # DNS
+provisioned_server_port = '80'  # default HTTP port
 
 ssid_handle = pass_handle = server_ip_handle = server_port_handle = None
 
@@ -112,12 +112,12 @@ async def connect_wifi(ssid, password):
     return False
 
 async def download_tertiary():
-    url = f'http://{provisioned_server_ip}/tertiary.mpy'   # ← long URL, no port (default 80)
+    url = f'http://{provisioned_server_ip}/tertiary.mpy'  # clean long URL, no port
     print(f'Downloading from {url}')
     print('Free memory before download:', gc.mem_free())
     for attempt in range(5):
         try:
-            resp = urequests.get(url, timeout=10)
+            resp = urequests.get(url, timeout=15)
             if resp.status_code == 200:
                 with open('/tertiary.mpy', 'wb') as f:
                     f.write(resp.content)
@@ -163,10 +163,10 @@ async def advertise_and_provision():
         while time.ticks_diff(time.ticks_ms(), start) < 30000:
             if provisioned_ssid and provisioned_pass:
                 print('Full credentials received! Proceeding to WiFi...')
-                ble.gap_advertise(None)  # Stop advertising immediately
+                ble.gap_advertise(None)
                 if await connect_wifi(provisioned_ssid, provisioned_pass):
                     await run_tertiary()
-                return  # Exit loop - tertiary takes over forever
+                return
             await asyncio.sleep_ms(100)
         print('Timeout - no full credentials')
         ble.gap_advertise(None)
