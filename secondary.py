@@ -40,6 +40,7 @@ def report_mac_to_javamoss():
     except Exception as e:
         print("MAC report failed (non-critical - will retry next boot):", e)
 # =============================================================================
+report_mac_to_javamoss()
 
 # === Print free memory before anything else ===
 print("Free memory at secondary start:", gc.mem_free())
