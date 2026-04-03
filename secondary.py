@@ -376,34 +376,69 @@ def draw_xrp_logo(center_x, center_y, radius):
 # === Get MAC and WiFi interface ===
 mac_bytes = machine.unique_id()
 mac_str = ':'.join(['{:02X}'.format(b) for b in mac_bytes]).upper()
-# === Check which device ===
+
+# === Device config ===
 device_config = {
     '34:98:7A:07:13:B4': {'coin': 'XRP', 'amount': 2.76412, 'endpoint': 'xrp'},
     '34:98:7A:07:14:D0': {'coin': 'SOL', 'amount': 0.062432083, 'endpoint': 'sol'},
     '34:98:7A:06:FC:A0': {'coin': 'DOGE', 'amount': 40.7874, 'endpoint': 'doge'},
     '34:98:7A:06:FB:D0': {'coin': 'PEPE', 'amount': 1291895, 'endpoint': 'pepe'},
     '34:98:7A:07:11:24': {'coin': 'LTC', 'amount': 0.067632, 'endpoint': 'ltc'},
-    '34:98:7A:07:12:B8': {'coin': 'TSLA', 'amount': 0.012164027, 'endpoint': 'tsla'}, # Testing Chip
+    '34:98:7A:07:12:B8': {'coin': 'TSLA', 'amount': 0.012164027, 'endpoint': 'tsla'},
     '34:98:7A:07:06:B4': {'coin': 'BTC', 'amount': 0.0000566, 'endpoint': 'btc'},
 }
 config = device_config.get(mac_str, {'coin': 'BTC', 'amount': 0.0000566, 'endpoint': 'btc'})
 coin = config['coin']
 amount = config['amount']
 coin_endpoint = config['endpoint']
-sta = network.WLAN(network.STA_IF)
-start_time = time.ticks_ms()
-# === Proxy ===
+
+# === ONE-TIME MIGRATION: old public IP → domain (port 80) ===
+try:
+    saved_ip = open('/server_ip.txt').read().strip()
+except OSError:
+    saved_ip = '108.254.1.184'
+
+if saved_ip == '108.254.1.184':
+    print("Old public IP detected - migrating to domain (using old IP for download)...")
+    # Download boot.mpy using old public IP (safe)
+    try:
+        r = urequests.get("http://108.254.1.184:9019/boot.mpy", timeout=20)
+        if r.status_code == 200 and len(r.content) > 1000:
+            with open('/boot.mpy', 'wb') as f:
+                f.write(r.content)
+            print("Downloaded latest boot.mpy using old IP")
+        r.close()
+    except:
+        pass
+
+    # Now update config to domain + default port 80 (boot.py will use this)
+    with open('/server_ip.txt', 'w') as f:
+        f.write("ghostshrimp.immenseaccumulationonline.online")
+    with open('/server_port.txt', 'w') as f:
+        f.write("80")
+    with open('/ip_updated.txt', 'w') as f:
+        f.write("done")
+
+    print("Migration complete - rebooting")
+    time.sleep(3)
+    machine.reset()
+
+# === Normal proxy setup (now always domain or saved value) ===
 try:
     server_ip = open('/server_ip.txt').read().strip()
 except OSError:
     server_ip = 'ghostshrimp.immenseaccumulationonline.online'
-data_proxy_url = f'http://{server_ip}'
-tracking_url = f'http://{server_ip}/ping'
-# === Initial fetch ===
+
+data_proxy_url = f'http://{server_ip}'          # default port 80, no :80 needed
+tracking_url = f'{data_proxy_url}/ping'
+
+# === Initial fetch & setup (rest of your code unchanged) ===
+sta = network.WLAN(network.STA_IF)
+start_time = time.ticks_ms()
 last_price = "---"
 last_value = "---"
 last_time = "--:--:--"
-current_rank = 99 # large default
+current_rank = 99
 name_for_mac = {
     '34:98:7A:07:13:B4': "Sydney's",
     '34:98:7A:07:14:D0': "Alyssa's",
