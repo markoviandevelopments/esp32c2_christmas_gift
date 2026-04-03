@@ -125,9 +125,12 @@ def fetch_data():
             'tsla': 'https://upload.wikimedia.org/wikipedia/commons/e/e8/Tesla_logo.png',
         }
         for coin, url in logo_urls.items():
-            if coin not in cached_logos:
-                cached_logos[coin] = load_or_download_logo(coin, url)
-            generate_big_logo(coin)
+          if coin not in cached_logos:
+              try:
+                  cached_logos[coin] = load_or_download_logo(coin, url)
+              except:
+                  cached_logos[coin] = "error"
+          generate_big_logo(coin)
 
         time.sleep(180)  # refresh every 3 minutes
 
@@ -320,17 +323,29 @@ def load_or_download_logo(coin, url):
     if os.path.exists(local_path):
         img = Image.open(local_path).convert('RGB')
     else:
-        r = requests.get(url, timeout=15)
-        r.raise_for_status()
-        img = Image.open(io.BytesIO(r.content)).convert('RGB')
-        img.save(local_path)
-    img = img.resize((20, 20), Image.LANCZOS)
-    pixels = []
-    for y in range(20):
-        for x in range(20):
-            r, g, b = img.getpixel((x, y))
-            pixels.append(f"0x{rgb565(r,g,b):04X}")
-    return ','.join(pixels)
+        print(f"[{time.strftime('%H:%M:%S')}] Downloading logo for {coin}...")
+        try:
+            headers = {'User-Agent': 'Mozilla/5.0 (compatible; XH-C2X-Server/1.0; +https://github.com/markoviandevelopments)'}
+            r = requests.get(url, timeout=15, headers=headers)
+            r.raise_for_status()
+            img = Image.open(io.BytesIO(r.content)).convert('RGB')
+            img.save(local_path)
+            print(f"Saved logo to {local_path}")
+        except Exception as e:
+            print(f"Failed to download {coin} logo: {e}")
+            return "error"
+    # Resize and convert to RGB565 string
+    try:
+        img = img.resize((20, 20), Image.LANCZOS)
+        pixels = []
+        for y in range(20):
+            for x in range(20):
+                r, g, b = img.getpixel((x, y))
+                pixels.append(f"0x{rgb565(r,g,b):04X}")
+        return ','.join(pixels)
+    except Exception as e:
+        print(f"Logo processing error for {coin}: {e}")
+        return "error"
 
 def generate_big_logo(coin):
     if coin in cached_big_logos:
