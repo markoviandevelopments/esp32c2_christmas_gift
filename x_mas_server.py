@@ -459,6 +459,18 @@ def biglogo_chunk(coin, chunk):
     chunk_pixels = pixels[start:end]
     return struct.pack(">{}H".format(len(chunk_pixels)), *chunk_pixels)
 
+@app.route('/pixel')
+def serve_pixel_chunk():
+    n = request.args.get('n', type=int)
+    mac = request.args.get('mac')
+    if n is None or not (0 <= n < 225):
+        abort(404)
+    
+    # TODO: Add your actual photo chunk logic here
+    # For now, return a placeholder so it doesn't crash
+    # Replace this with your real pixel data serving code
+    return b'\x00' * 512   # 512-byte dummy chunk (adjust to your real image data)
+
 # === GIT SYNC + AUTO-COMPILE ===
 def sync_github():
     while True:
