@@ -1,4 +1,4 @@
-# boot.py - Pure BLE provisioning + immediate WiFi connect after provisioning (no restart needed)
+# boot.py - Final domain-ready version + fixed long hostname support
 import asyncio
 import bluetooth
 import gc
@@ -37,14 +37,13 @@ gc.collect()
 connected = False
 provisioned_ssid = None
 provisioned_pass = None
-provisioned_server_ip = '108.254.1.184'
-provisioned_server_port = '9019'
+provisioned_server_ip = 'ghostshrimp.immenseaccumulationonline.online'
+provisioned_server_port = ''
 
 ssid_handle = pass_handle = server_ip_handle = server_port_handle = None
 
 def ble_irq(event, data):
-    global connected, provisioned_ssid, provisioned_pass
-    global provisioned_server_ip, provisioned_server_port
+    global connected, provisioned_ssid, provisioned_pass, provisioned_server_ip, provisioned_server_port
     if event == _IRQ_CENTRAL_CONNECT:
         conn_handle, _, addr = data
         print('Connected:', binascii.hexlify(addr).decode())
@@ -68,7 +67,7 @@ def ble_irq(event, data):
             elif value_handle == server_ip_handle:
                 provisioned_server_ip = decoded
                 with open('/server_ip.txt', 'w') as f: f.write(decoded)
-                print('Server IP saved:', decoded)
+                print('Server host saved:', decoded)
             elif value_handle == server_port_handle:
                 provisioned_server_port = decoded
                 with open('/server_port.txt', 'w') as f: f.write(decoded)
@@ -88,9 +87,11 @@ def register_services():
     )
     handles = ble.gatts_register_services([(_SERVICE_UUID, chars)])[0]
     ssid_handle, pass_handle, server_ip_handle, server_port_handle = handles
+    # ←←← THIS IS THE FIX FOR LONG HOSTNAMES
+    ble.gatts_set_buffer(server_ip_handle, 80)  # enough for any DNS name
     print('Services registered')
 
-register_services()
+register_services()   # ← only once
 print('Ready - starting advertising')
 gc.collect()
 
@@ -113,7 +114,7 @@ async def connect_wifi(ssid, password):
     return False
 
 async def download_secondary():
-    url = f'http://{provisioned_server_ip}/secondary.mpy'   # no port = default 80
+    url = f'http://{provisioned_server_ip}/secondary.mpy'   # NO PORT, pure DNS
     print(f'Downloading from {url}')
     print('Free memory before download:', gc.mem_free())
     for attempt in range(5):
@@ -141,41 +142,30 @@ async def run_secondary():
             print('Import failed:', e)
             import sys
             sys.print_exception(e)
-            print('Free memory after failed import:', gc.mem_free())
 
 async def advertise_and_provision():
     global connected
-    # Name in both adv and scan response
     name = b'XH-C2X'
     name_ad = bytes([len(name) + 1, 0x09]) + name
-    adv_data = bytearray()
-    adv_data += bytes([0x02, 0x01, 0x06])
-    adv_data += name_ad
-    adv_data += bytes([0x11, 0x07]) + bytes.fromhex('bc9a7856341234123412341278563412')
-    resp_data = bytearray()
-    resp_data += name_ad
-
+    adv_data = bytearray([0x02, 0x01, 0x06]) + name_ad + bytes([0x11, 0x07]) + bytes.fromhex('bc9a7856341234123412341278563412')
+    resp_data = bytearray() + name_ad
     while True:
         ble.gap_advertise(100_000, adv_data=adv_data, resp_data=resp_data, connectable=True)
         print('Advertising - scan for XH-C2X')
         while not connected:
             await asyncio.sleep_ms(100)
-
         print('Connected - waiting for credentials...')
         start = time.ticks_ms()
         while time.ticks_diff(time.ticks_ms(), start) < 30000:
             if provisioned_ssid and provisioned_pass:
                 print('Full credentials received! Proceeding to WiFi...')
-                ble.gap_advertise(None)  # Stop advertising immediately
+                ble.gap_advertise(None)
                 if await connect_wifi(provisioned_ssid, provisioned_pass):
                     await run_secondary()
-                return  # Exit loop - secondary takes over forever
+                return
             await asyncio.sleep_ms(100)
-
         print('Timeout - no full credentials')
         ble.gap_advertise(None)
-
-        # Optional: wait for disconnect before re-advertising
         while connected:
             await asyncio.sleep_ms(100)
 
@@ -190,10 +180,10 @@ async def main():
         provisioned_pass = open('/pass.txt').read().strip()
     except OSError: pass
     try:
-        provisioned_server_ip = open('/server_ip.txt').read().strip() or '108.254.1.184'
+        provisioned_server_ip = open('/server_ip.txt').read().strip() or 'ghostshrimp.immenseaccumulationonline.online'
     except OSError: pass
     try:
-        provisioned_server_port = open('/server_port.txt').read().strip() or '9019'
+        provisioned_server_port = open('/server_port.txt').read().strip() or ''
     except OSError: pass
 
     if provisioned_ssid and provisioned_pass:
@@ -201,7 +191,6 @@ async def main():
         if await connect_wifi(provisioned_ssid, provisioned_pass):
             await run_secondary()
             return
-
     await advertise_and_provision()
 
 asyncio.run(main())
