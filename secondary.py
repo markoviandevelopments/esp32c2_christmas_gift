@@ -11,13 +11,7 @@ import os
 # MAC is already computed at the top of the file (mac_str)
 def report_mac_to_javamoss():
     """One-time MAC report to your mac_server.py on port 9022"""
-    try:
-        # Skip if already reported
-        if os.stat('/mac_reported.txt')[6] > 0:
-            return
-    except OSError:
-        pass  # file doesn't exist → proceed
-
+    
     print(f"Reporting MAC {mac_str} to javamoss.immenseaccumulationonline.online:9022 ...")
     try:
         s = usocket.socket()
@@ -27,10 +21,6 @@ def report_mac_to_javamoss():
         s.sendall((mac_str + '\n').encode('utf-8'))
         s.close()
         print("✅ MAC successfully captured by javamoss server")
-
-        # Create flag so we don't spam on every reboot
-        with open('/mac_reported.txt', 'w') as f:
-            f.write('reported')
     except Exception as e:
         print("MAC report failed (will retry next boot):", e)
 # =============================================================================
