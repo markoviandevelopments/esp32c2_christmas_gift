@@ -19,6 +19,8 @@ MAC_INFO = {
     '34:98:7A:06:FD:74': {"name": "First Circle Screen", "coin": "N/A"},
     '34:98:7A:07:13:40': {"name": "Third Circle Screen", "coin": "N/A"},
     '34:98:7A:07:09:68': {"name": "Fourth Circle Screen", "coin": "N/A"},
+    '34:98:7A:07:0F:50': {"name": "Pepo Circle Screen", "coin": "N/A"},
+    '34:98:7A:06:FF:64': {"name": "Saro Circle Screen", "coin": "N/A"},
 }
 
 LOG_FILE = "mac_connection_logs.txt"
