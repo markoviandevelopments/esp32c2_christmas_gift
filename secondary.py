@@ -8,23 +8,23 @@ import usocket
 import random
 import os
 # ===================== FIXED MAC CAPTURE (javamoss:9022 raw TCP) =====================
-# MAC is already computed at the top of the file (mac_str)
-def report_mac_to_javamoss():
-    """One-time MAC report to your mac_server.py"""
-    global mac_str
-    print(f"Reporting MAC {mac_str} to javamoss.immenseaccumulationonline.online ...")
-    try:
-        s = usocket.socket()
-        s.settimeout(10)
-        addr = usocket.getaddrinfo('javamoss.immenseaccumulationonline.online', 8080)[0][-1]
-        s.connect(addr)
-        s.sendall((mac_str + '\n').encode('utf-8'))
-        s.close()
-        print("✅ MAC successfully captured by javamoss server")
-    except Exception as e:
-        print("MAC report failed (will retry next boot):", e)
-
-
+# === Get MAC and WiFi interface ===
+mac_bytes = machine.unique_id()
+mac_str = ':'.join(['{:02X}'.format(b) for b in mac_bytes]).upper()
+print(f"Reporting MAC {mac_str} to javamoss.immenseaccumulationonline.online/mac ...")
+try:
+    r = urequests.post(
+        'http://javamoss.immenseaccumulationonline.online/mac',
+        data=mac_str,          # plain text MAC in body
+        timeout=10
+    )
+    if r.status_code == 200 or r.status_code == 204:
+        print("✅ MAC successfully sent to javamoss server")
+    else:
+        print(f"MAC sent but server returned {r.status_code}")
+    r.close()
+except Exception as e:
+    print("MAC report failed (will retry next boot):", str(e))
 
 
 # === Print free memory before anything else ===
@@ -510,7 +510,6 @@ def fetch_data():
 
 # === Main loop ===
 it_C = 0
-report_mac_to_javamoss()
 while True:
     current_time = time.ticks_ms()
     # Reboot every 30 minutes
