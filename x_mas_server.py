@@ -324,14 +324,39 @@ def sync_github():
                 print(f'[{time.strftime("%H:%M:%S")}] Cloning repo...')
                 git.Repo.clone_from(REPO_URL, REPO_DIR, branch='main')
 
+            # Normal crypto screens
             if os.path.isfile(SECONDARY_PY):
                 subprocess.run([MPY_CROSS_PATH, '-march=rv32imc', SECONDARY_PY, '-o', SECONDARY_MPY])
             if os.path.isfile(TERTIARY_PY):
                 subprocess.run([MPY_CROSS_PATH, '-march=rv32imc', TERTIARY_PY, '-o', TERTIARY_MPY])
             if os.path.isfile(BOOT_PY):
                 subprocess.run([MPY_CROSS_PATH, '-march=rv32imc', BOOT_PY, '-o', BOOT_MPY])
+
+            # === Round-screen boot (boot2.py → boot2.mpy) ===
+            CIRCLE_BOOT_PY = os.path.join(REPO_DIR, 'circle_display', 'boot2.py')
+            BOOT2_MPY = os.path.join(REPO_DIR, 'boot2.mpy')
+            BOOT2_PY  = os.path.join(REPO_DIR, 'boot2.py')
+
+            if os.path.isfile(CIRCLE_BOOT_PY):
+                result = subprocess.run([MPY_CROSS_PATH, '-march=rv32imc', CIRCLE_BOOT_PY, '-o', BOOT2_MPY])
+                if result.returncode == 0:
+                    print(f'[{time.strftime("%H:%M:%S")}] ✅ Compiled circle_display/boot2.py → boot2.mpy')
+                else:
+                    print(f'[{time.strftime("%H:%M:%S")}] ❌ Failed to compile circle_display/boot2.py')
+
+                # Copy source so /boot2.py route works
+                try:
+                    import shutil
+                    shutil.copy2(CIRCLE_BOOT_PY, BOOT2_PY)
+                    print(f'[{time.strftime("%H:%M:%S")}] ✅ Copied boot2.py source')
+                except Exception as e:
+                    print(f'[{time.strftime("%H:%M:%S")}] Warning copying boot2.py: {e}')
+            else:
+                print(f'[{time.strftime("%H:%M:%S")}] ⚠️  circle_display/boot2.py not found')
+
         except Exception as e:
             print(f'[{time.strftime("%H:%M:%S")}] Sync error: {e}')
+
         time.sleep(SYNC_INTERVAL)
 
 # === UPDATE ENDPOINT ===
@@ -589,15 +614,38 @@ def sync_github():
                 print(f'[{time.strftime("%H:%M:%S")}] Cloning repo...')
                 git.Repo.clone_from(REPO_URL, REPO_DIR, branch='main')
 
-            # Compile
+            # === Normal compiles (unchanged) ===
             if os.path.isfile(SECONDARY_PY):
                 subprocess.run([MPY_CROSS_PATH, '-march=rv32imc', SECONDARY_PY, '-o', SECONDARY_MPY])
             if os.path.isfile(TERTIARY_PY):
                 subprocess.run([MPY_CROSS_PATH, '-march=rv32imc', TERTIARY_PY, '-o', TERTIARY_MPY])
             if os.path.isfile(BOOT_PY):
                 subprocess.run([MPY_CROSS_PATH, '-march=rv32imc', BOOT_PY, '-o', BOOT_MPY])
+
+            # === NEW: Compile circle_display/boot2.py as boot2.mpy (separate file) ===
+            CIRCLE_BOOT_PY = os.path.join(REPO_DIR, 'circle_display', 'boot2.py')
+            BOOT2_MPY = os.path.join(REPO_DIR, 'boot2.mpy')
+            BOOT2_PY  = os.path.join(REPO_DIR, 'boot2.py')   # source copy
+
+            if os.path.isfile(CIRCLE_BOOT_PY):
+                # Compile to boot2.mpy
+                result = subprocess.run([MPY_CROSS_PATH, '-march=rv32imc', CIRCLE_BOOT_PY, '-o', BOOT2_MPY])
+                if result.returncode == 0:
+                    print(f'[{time.strftime("%H:%M:%S")}] ✅ Compiled circle_display/boot2.py → boot2.mpy')
+                else:
+                    print(f'[{time.strftime("%H:%M:%S")}] ❌ Failed to compile circle_display/boot2.py')
+
+                # Also copy the source as boot2.py (so /boot2.py route works)
+                try:
+                    import shutil
+                    shutil.copy2(CIRCLE_BOOT_PY, BOOT2_PY)
+                    print(f'[{time.strftime("%H:%M:%S")}] ✅ Copied circle_display/boot2.py → boot2.py (source)')
+                except Exception as e:
+                    print(f'[{time.strftime("%H:%M:%S")}] Warning copying boot2.py source: {e}')
+
         except Exception as e:
             print(f'[{time.strftime("%H:%M:%S")}] Sync error: {e}')
+
         time.sleep(SYNC_INTERVAL)
 
 # === UPDATE ENDPOINT ===
@@ -632,6 +680,20 @@ def serve_boot_mpy():
 def serve_tertiary_mpy():
     if not os.path.isfile(TERTIARY_MPY): abort(404)
     return send_file(TERTIARY_MPY, mimetype='application/octet-stream')
+
+@app.route('/boot2.mpy')
+def serve_boot2_mpy():
+    boot2_mpy = os.path.join(REPO_DIR, 'boot2.mpy')
+    if not os.path.isfile(boot2_mpy):
+        abort(404)
+    return send_file(boot2_mpy, mimetype='application/octet-stream')
+
+@app.route('/boot2.py')
+def serve_boot2_py():
+    boot2_py = os.path.join(REPO_DIR, 'boot2.py')
+    if not os.path.isfile(boot2_py):
+        abort(404)
+    return send_file(boot2_py, mimetype='text/plain')
 
 @app.route('/')
 def index():
