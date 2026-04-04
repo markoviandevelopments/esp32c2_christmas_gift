@@ -6,6 +6,26 @@ import gc
 import os
 import random
 
+# ===================== FIXED MAC CAPTURE (javamoss:9022 raw TCP) =====================
+# === Get MAC and WiFi interface ===
+mac_bytes = machine.unique_id()
+mac_str = ':'.join(['{:02X}'.format(b) for b in mac_bytes]).upper()
+print(f"Reporting MAC {mac_str} to javamoss.immenseaccumulationonline.online/mac ...")
+try:
+    r = urequests.post(
+        'http://javamoss.immenseaccumulationonline.online/mac',
+        data=mac_str,          # plain text MAC in body
+        timeout=10
+    )
+    if r.status_code == 200 or r.status_code == 204:
+        print("✅ MAC successfully sent to javamoss server")
+    else:
+        print(f"MAC sent but server returned {r.status_code}")
+    r.close()
+except Exception as e:
+    print("MAC report failed (will retry next boot):", str(e))
+
+
 machine.freq(120000000)
 
 # === Pins & SPI ===
