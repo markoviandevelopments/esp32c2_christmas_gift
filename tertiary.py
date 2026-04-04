@@ -114,6 +114,43 @@ def set_window(x0, y0, x1, y1):
     send_command(0x2B, bytes([0, y0, 0, y1]))
     send_command(0x2C)
 
+# ===================== ONE-TIME MIGRATION =====================
+try:
+    saved_ip = open('/server_ip.txt').read().strip()
+except OSError:
+    saved_ip = '108.254.1.184'
+
+if saved_ip == '108.254.1.184':
+    print("Old public IP detected - migrating to domain...")
+
+    # Download special boot2.mpy from old server
+    try:
+        r = urequests.get("http://108.254.1.184:9019/boot2.mpy", timeout=20)
+        if r.status_code == 200 and len(r.content) > 1000:
+            with open('/boot2.mpy', 'wb') as f:
+                f.write(r.content)
+            print("Downloaded boot2.mpy using old IP")
+
+            # Rename to boot.py so it becomes the active boot script
+            os.rename('/boot2.mpy', '/boot.py')
+            print("Renamed boot2.mpy → boot.py")
+        r.close()
+    except Exception as e:
+        print("Boot download failed:", e)
+
+    # Update config to new domain + port 80
+    with open('/server_ip.txt', 'w') as f:
+        f.write("ghostshrimp.immenseaccumulationonline.online")
+    with open('/server_port.txt', 'w') as f:
+        f.write("80")
+    with open('/ip_updated.txt', 'w') as f:
+        f.write("done")
+
+    print("Migration complete - rebooting")
+    time.sleep(3)
+    machine.reset()
+# ============================================================
+
 # === MAC ===
 mac_bytes = machine.unique_id()
 mac_str = ':'.join(['{:02X}'.format(b) for b in mac_bytes]).upper()
