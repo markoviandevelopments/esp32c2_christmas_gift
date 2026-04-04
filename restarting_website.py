@@ -6,7 +6,7 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-# MAC to friendly info
+# MAC to friendly info (exactly as you had it)
 MAC_INFO = {
     '34:98:7A:07:13:B4': {"name": "Sydney's", "coin": "XRP"},
     '34:98:7A:07:14:D0': {"name": "Alyssa's", "coin": "SOL"},
@@ -19,9 +19,11 @@ MAC_INFO = {
     '34:98:7A:06:FD:74': {"name": "First Circle Screen", "coin": "N/A"},
     '34:98:7A:07:13:40': {"name": "Third Circle Screen", "coin": "N/A"},
     '34:98:7A:07:09:68': {"name": "Fourth Circle Screen", "coin": "N/A"},
-    
 }
+
 LOG_FILE = "mac_connection_logs.txt"
+
+# Global: MAC -> latest datetime
 last_seen = {mac: None for mac in MAC_INFO}
 lock = threading.Lock()
 
@@ -31,7 +33,6 @@ def parse_log():
     if not os.path.exists(LOG_FILE):
         print(f"[{datetime.now()}] Log file not found")
         return
-
     try:
         with open(LOG_FILE, 'r') as f:
             for line in f:
@@ -58,12 +59,25 @@ def parse_log():
     except Exception as e:
         print(f"[{datetime.now()}] Parse error: {e}")
 
+def timesince(dt):  # ← THIS WAS MISSING / NOT PASSED
+    if not dt:
+        return "unknown"
+    delta = datetime.now() - dt
+    if delta.days > 0:
+        return f"{delta.days} days"
+    hours = delta.seconds // 3600
+    if hours > 0:
+        return f"{hours} hours"
+    minutes = delta.seconds // 60
+    if minutes > 0:
+        return f"{minutes} minutes"
+    return "just now"
+
 def background_refresh():
     while True:
         parse_log()
-        time.sleep(30)  # ← changed to 30 seconds for you
+        time.sleep(30)  # refresh every 30 seconds
 
-# Your existing TEMPLATE and timesince function stay exactly the same
 TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -84,7 +98,7 @@ TEMPLATE = """
 </head>
 <body>
     <h1>Device Last Restart Times</h1>
-    <p style="text-align:center;">Refreshed every 5 minutes from connection logs. Times in server timezone.</p>
+    <p style="text-align:center;">Refreshed every 30 seconds from connection logs. Times in server timezone.</p>
     <table>
         <tr><th>Name</th><th>Coin</th><th>MAC</th><th>Last Connection (Restart)</th></tr>
         {% for mac in macs %}
@@ -112,7 +126,7 @@ TEMPLATE = """
 
 @app.route('/')
 def index():
-    parse_log()  # ← force fresh parse every page load
+    parse_log()  # force fresh read on every page load
     with lock:
         sorted_macs = sorted(MAC_INFO.keys())
         return render_template_string(
@@ -120,7 +134,7 @@ def index():
             macs=sorted_macs,
             info=MAC_INFO,
             last_seen=last_seen,
-            timesince=timesince,
+            timesince=timesince,   # ← fixed
             now=datetime.now()
         )
 
