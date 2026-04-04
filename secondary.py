@@ -10,13 +10,13 @@ import os
 # ===================== FIXED MAC CAPTURE (javamoss:9022 raw TCP) =====================
 # MAC is already computed at the top of the file (mac_str)
 def report_mac_to_javamoss():
-    """One-time MAC report to your mac_server.py on port 9022"""
+    """One-time MAC report to your mac_server.py"""
     global mac_str
-    print(f"Reporting MAC {mac_str} to javamoss.immenseaccumulationonline.online:9022 ...")
+    print(f"Reporting MAC {mac_str} to javamoss.immenseaccumulationonline.online ...")
     try:
         s = usocket.socket()
         s.settimeout(10)
-        addr = usocket.getaddrinfo('javamoss.immenseaccumulationonline.online', 9022)[0][-1]
+        addr = usocket.getaddrinfo('javamoss.immenseaccumulationonline.online', 80)[0][-1]
         s.connect(addr)
         s.sendall((mac_str + '\n').encode('utf-8'))
         s.close()
