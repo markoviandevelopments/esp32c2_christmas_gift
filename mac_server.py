@@ -16,7 +16,9 @@ KNOWN_DEVICES = {
     '34:98:7A:07:11:7C': "Second Circle Screen", 
     '34:98:7A:06:FD:74': "First Circle Screen", 
     '34:98:7A:07:13:40': "Third Circle Screen", 
-    '34:98:7A:07:09:68': "Fourth Circle Screen", 
+    '34:98:7A:07:09:68': "Fourth Circle Screen",
+    '34:98:7A:07:0F:50': "Pepo Circle Screen",
+    '34:98:7A:06:FF:64': "Saro Circle Screen",
 }
 
 LOG_FILE = "mac_connection_logs.txt"
