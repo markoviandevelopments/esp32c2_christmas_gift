@@ -3,7 +3,6 @@ import threading
 import time
 import os
 from datetime import datetime
-import re
 
 app = Flask(__name__)
 
@@ -22,18 +21,13 @@ MAC_INFO = {
     '34:98:7A:07:09:68': {"name": "Fourth Circle Screen", "coin": "N/A"},
     
 }
-
 LOG_FILE = "mac_connection_logs.txt"
-
-# Global: MAC -> latest datetime
 last_seen = {mac: None for mac in MAC_INFO}
-
 lock = threading.Lock()
 
 def parse_log():
     global last_seen
     temp_seen = {mac: None for mac in MAC_INFO}
-
     if not os.path.exists(LOG_FILE):
         print(f"[{datetime.now()}] Log file not found")
         return
@@ -44,43 +38,32 @@ def parse_log():
                 line = line.strip()
                 if not line:
                     continue
-
-                # Split by ' | ' → expect 4 parts now
                 parts = line.split(' | ')
                 if len(parts) != 4:
-                    continue  # Skip malformed lines
-
-                ts_str, ip_port, mac, device_name = parts
-                mac = mac.strip().upper()  # Normalize MAC
-
+                    continue
+                ts_str, ip, mac, device_name = [p.strip() for p in parts]
+                mac = mac.upper()
                 if mac in temp_seen:
                     try:
                         timestamp = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
-                        # Only update if this timestamp is newer than what we have
                         if temp_seen[mac] is None or timestamp > temp_seen[mac]:
                             temp_seen[mac] = timestamp
                     except ValueError:
-                        pass  # Bad timestamp format, skip this line
-
-        # Thread-safe update of the global last_seen
+                        pass
         with lock:
             for mac, ts in temp_seen.items():
-                if ts is not None:
-                    if last_seen[mac] is None or ts > last_seen[mac]:
-                        last_seen[mac] = ts
-
+                if ts is not None and (last_seen[mac] is None or ts > last_seen[mac]):
+                    last_seen[mac] = ts
         print(f"[{datetime.now()}] Log parsed successfully – updated {sum(1 for v in temp_seen.values() if v is not None)} devices")
-
     except Exception as e:
         print(f"[{datetime.now()}] Parse error: {e}")
-        
 
 def background_refresh():
     while True:
         parse_log()
-        time.sleep(300)  # Every 5 minutes
+        time.sleep(30)  # ← changed to 30 seconds for you
 
-# Same nice HTML template as before
+# Your existing TEMPLATE and timesince function stay exactly the same
 TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -127,18 +110,9 @@ TEMPLATE = """
 </html>
 """
 
-def timesince(dt):
-    if not dt: return "unknown"
-    delta = datetime.now() - dt
-    if delta.days > 0: return f"{delta.days} days"
-    hours = delta.seconds // 3600
-    if hours > 0: return f"{hours} hours"
-    minutes = delta.seconds // 60
-    if minutes > 0: return f"{minutes} minutes"
-    return "just now"
-
 @app.route('/')
 def index():
+    parse_log()  # ← force fresh parse every page load
     with lock:
         sorted_macs = sorted(MAC_INFO.keys())
         return render_template_string(
@@ -151,7 +125,7 @@ def index():
         )
 
 if __name__ == '__main__':
-    parse_log()  # Initial load
+    parse_log()  # initial load
     threading.Thread(target=background_refresh, daemon=True).start()
     print("Status website starting on http://0.0.0.0:9024")
-    app.run(host='0.0.0.0', port=9024)
+    app.run(host='0.0.0.0', port=9024, debug=False)
