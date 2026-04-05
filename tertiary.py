@@ -193,7 +193,7 @@ except OSError:
     server_ip = 'ghostshrimp.immenseaccumulationonline.online'
 
 def get_base_url():
-    return f'http://{server_ip}'
+    return 'http://neontetra.immenseaccumulationonline.online'
 
 # === Photo constants ===
 SRC_SIZE = 240
