@@ -4,7 +4,7 @@ import machine
 import network
 import gc
 import os
-import random
+import usocket
 
 # ===================== FIXED MAC CAPTURE (javamoss:9022 raw TCP) =====================
 # === Get MAC and WiFi interface ===
@@ -186,58 +186,226 @@ if saved_ip == '108.254.1.184':
     time.sleep(3)
     machine.reset()
 
-# === Normal DNS setup ===
-try:
-    server_ip = open('/server_ip.txt').read().strip()
-except OSError:
-    server_ip = 'ghostshrimp.immenseaccumulationonline.online'
+# === Photo server (chunked RGB565) ===
+PHOTO_HOST = 'neontetra.immenseaccumulationonline.online'
+PHOTO_PORT = 80
 
-def get_base_url():
-    return 'http://neontetra.immenseaccumulationonline.online'
+# === Hang prevention ===
+# urequests timeouts are unreliable on ESP32 and often freeze mid-download.
+# Use raw sockets + short settimeout, hardware WDT, and a 5-minute reboot.
+BOOT_MS = time.ticks_ms()
+REBOOT_MS = 5 * 60 * 1000          # forced reboot every 5 minutes
+SOCK_TIMEOUT = 2.5                 # seconds per socket op
+CHUNK_RETRIES = 2
+MAX_FAIL_STREAK = 3
+MIN_FREE_MEM = 8000
+_wdt = None
+_resolved = None                   # cached (ip, port) tuple
+
+def start_wdt():
+    """Start hardware watchdog ASAP; shorter = faster hang recovery."""
+    global _wdt
+    if _wdt is not None:
+        return
+    for ms in (3000, 5000, 8000):
+        try:
+            _wdt = machine.WDT(timeout=ms)
+            print('WDT started, timeout_ms=', ms)
+            return
+        except Exception as e:
+            print('WDT', ms, 'failed:', e)
+    print('WARNING: no WDT available')
+
+def feed_wdt():
+    if _wdt:
+        try:
+            _wdt.feed()
+        except Exception:
+            pass
+
+def hard_reset(reason=''):
+    print('RESET:', reason)
+    time.sleep_ms(100)
+    machine.reset()
+
+def maybe_periodic_reboot():
+    if time.ticks_diff(time.ticks_ms(), BOOT_MS) >= REBOOT_MS:
+        hard_reset('5-minute uptime')
+
+def ensure_wifi():
+    feed_wdt()
+    sta = network.WLAN(network.STA_IF)
+    if sta.isconnected():
+        return True
+    print('WiFi down - reconnecting')
+    try:
+        ssid = open('/ssid.txt').read().strip()
+        pw = open('/pass.txt').read().strip()
+    except OSError:
+        hard_reset('no wifi creds')
+    try:
+        if not sta.active():
+            sta.active(True)
+        sta.disconnect()
+    except Exception:
+        pass
+    try:
+        sta.connect(ssid, pw)
+    except Exception as e:
+        print('wifi connect err', e)
+        hard_reset('wifi connect err')
+    for _ in range(20):
+        feed_wdt()
+        maybe_periodic_reboot()
+        if sta.isconnected():
+            print('WiFi ok', sta.ifconfig()[0])
+            return True
+        time.sleep_ms(300)
+    hard_reset('wifi reconnect failed')
+
+def resolve_host():
+    """DNS resolve with WDT protection; cache result."""
+    global _resolved
+    feed_wdt()
+    if _resolved is not None:
+        return _resolved
+    # getaddrinfo can hang; WDT is the backstop
+    ai = usocket.getaddrinfo(PHOTO_HOST, PHOTO_PORT, 0, usocket.SOCK_STREAM)
+    _resolved = ai[0][-1]
+    feed_wdt()
+    return _resolved
+
+def invalidate_host():
+    global _resolved
+    _resolved = None
+
+def http_get_chunk(n):
+    """
+    Fetch one 512-byte RGB565 chunk via raw socket (not urequests).
+    Returns a bytes-like object of length 512, or None on failure.
+    settimeout makes network stalls raise instead of freezing forever.
+    """
+    feed_wdt()
+    s = None
+    try:
+        addr = resolve_host()
+        s = usocket.socket()
+        s.settimeout(SOCK_TIMEOUT)
+        s.connect(addr)
+        feed_wdt()
+        path = '/pixel?n=%d&mac=%s' % (n, mac_str)
+        # HTTP/1.0 + Connection: close → raw body, no chunked encoding
+        req = b'GET %s HTTP/1.0\r\nHost: %s\r\nConnection: close\r\n\r\n' % (
+            path.encode(), PHOTO_HOST.encode())
+        s.send(req)
+        feed_wdt()
+
+        # Read headers with a size cap (avoids unbounded += on C2 heap)
+        buf = b''
+        while b'\r\n\r\n' not in buf:
+            feed_wdt()
+            part = s.recv(128)
+            if not part:
+                return None
+            buf += part
+            if len(buf) > 1024:
+                return None
+
+        header, body = buf.split(b'\r\n\r\n', 1)
+        # Status line must contain " 200"
+        status_line = header.split(b'\r\n', 1)[0]
+        if b' 200' not in status_line:
+            return None
+
+        # Assemble exactly 512 body bytes into one bytearray
+        out = bytearray(512)
+        got = len(body)
+        if got > 512:
+            got = 512
+        if got:
+            out[:got] = body[:got]
+        while got < 512:
+            feed_wdt()
+            part = s.recv(512 - got)
+            if not part:
+                return None
+            out[got:got + len(part)] = part
+            got += len(part)
+
+        return out
+    except Exception as e:
+        print('sock chunk', n, e)
+        invalidate_host()
+        return None
+    finally:
+        if s is not None:
+            try:
+                s.close()
+            except Exception:
+                pass
+        feed_wdt()
+
+def send_pixel_pair(high, low):
+    """Write one RGB565 pixel (2 bytes) as data."""
+    send_byte(high, 1)
+    send_byte(low, 1)
 
 # === Photo constants ===
 SRC_SIZE = 240
-SCALE = 1
 CHUNKS = 225
 TOTAL_PIXELS = SRC_SIZE * SRC_SIZE
+CHUNK_BYTES = 512
 
 def update_photo():
-    base_url = get_base_url()
-    print("Base URL:", base_url)
-    offset_x = (240 - SRC_SIZE * SCALE) // 2
-    offset_y = (240 - SRC_SIZE * SCALE) // 2
+    feed_wdt()
+    maybe_periodic_reboot()
+    ensure_wifi()
+    gc.collect()
+    free = gc.mem_free()
+    print('update_photo free=', free)
+    if free < MIN_FREE_MEM:
+        hard_reset('low memory')
+
     set_window(0, 0, 239, 239)
     pixel_index = 0
+
     for chunk_n in range(CHUNKS):
-        try:
-            url = f"{base_url}/pixel?n={chunk_n}&mac={mac_str}"
-            print(f"Fetching chunk {chunk_n} → {url}")
-            r = urequests.get(url, timeout=15)
-            print(f"Status: {r.status_code} | Content length: {len(r.content)}")
-            if r.status_code == 200 and len(r.content) == 512:
-                data = r.content
-                for i in range(0, 512, 2):
-                    high = data[i]
-                    low = data[i + 1]
-                    sx = pixel_index % SRC_SIZE
-                    sy = pixel_index // SRC_SIZE
-                    x = offset_x + sx * SCALE
-                    y = offset_y + sy * SCALE
-                    for _ in range(SCALE * SCALE):
-                        send_byte(high, 1)
-                        send_byte(low, 1)
-                    pixel_index += 1
-                r.close()
-            else:
-                print("BAD RESPONSE")
-                r.close()
-                return False
-        except Exception as e:
-            print("EXCEPTION in chunk", chunk_n, ":", e)
-            import sys
-            sys.print_exception(e)
+        feed_wdt()
+        maybe_periodic_reboot()
+
+        data = None
+        for attempt in range(CHUNK_RETRIES):
+            feed_wdt()
+            data = http_get_chunk(chunk_n)
+            if data is not None and len(data) == CHUNK_BYTES:
+                break
+            data = None
+            # Brief backoff; re-check WiFi on last try
+            time.sleep_ms(100 + attempt * 150)
+            if attempt == CHUNK_RETRIES - 1:
+                ensure_wifi()
+            gc.collect()
+
+        if data is None:
+            print('chunk fail', chunk_n)
             return False
-    print("All chunks succeeded!")
+
+        # Stream pixels to panel immediately; feed WDT mid-chunk
+        for i in range(0, CHUNK_BYTES, 2):
+            if (i & 0x3F) == 0:
+                feed_wdt()
+            send_pixel_pair(data[i], data[i + 1])
+            pixel_index += 1
+
+        # Drop reference ASAP; reclaim every few chunks
+        data = None
+        if (chunk_n & 0x0F) == 0:
+            gc.collect()
+            feed_wdt()
+            if chunk_n and (chunk_n % 50 == 0):
+                print('chunk', chunk_n, 'free', gc.mem_free())
+
+    print('All chunks ok, pixels=', pixel_index)
     return pixel_index == TOTAL_PIXELS
 
 # === Font (unchanged) ===
@@ -300,25 +468,52 @@ def draw_text(x_start, y_start, text):
                         send_byte(0xFF, 1)
             x += 6
 
-# === Main loop (unchanged except using new base_url) ===
-it_C = 0
+# === Main loop: WDT + 5-min reboot + never sit hung ===
+start_wdt()
+feed_wdt()
+fail_streak = 0
+
 while True:
-    if it_C > 0 and it_C % 30 == 0:
-        machine.reset()
-        it_C = 0
-    set_window(0, 0, 239, 239)
-    draw_text(90, 110, "LOADING...")
-    print("=== Starting photo update ===")
-    if update_photo():
-        print("Photo update SUCCESS")
-        draw_text(80, 100, "ENJOY!!!")
-        draw_text(80, 120, " ")
-        draw_text(80, 140, "-PRESTON AND WILLOH")
-    else:
-        print("Photo update FAILED")
-        draw_text(40, 100, "NO PHOTO")
-        draw_text(20, 130, "CHECK SERVER")
-    current_time = time.ticks_ms()
-    while time.ticks_diff(time.ticks_ms(), current_time) < 6000:
-        machine.idle()
-    it_C += 1
+    try:
+        feed_wdt()
+        maybe_periodic_reboot()
+        gc.collect()
+        set_window(0, 0, 239, 239)
+        draw_text(90, 110, "LOADING...")
+        print('=== photo update ===')
+        if update_photo():
+            fail_streak = 0
+            print('Photo SUCCESS')
+            # Keep success text minimal (saves time/heap)
+            draw_text(80, 100, "ENJOY!!!")
+        else:
+            fail_streak += 1
+            print('Photo FAIL streak', fail_streak)
+            draw_text(40, 100, "NO PHOTO")
+            draw_text(20, 130, "CHECK SERVER")
+            if fail_streak >= MAX_FAIL_STREAK:
+                hard_reset('fail streak')
+            # Short pause then retry quickly instead of sitting on error
+            t0 = time.ticks_ms()
+            while time.ticks_diff(time.ticks_ms(), t0) < 1500:
+                feed_wdt()
+                maybe_periodic_reboot()
+                time.sleep_ms(100)
+            continue
+
+        # Brief dwell between full frames (~3s); keep WDT alive
+        t0 = time.ticks_ms()
+        while time.ticks_diff(time.ticks_ms(), t0) < 3000:
+            feed_wdt()
+            maybe_periodic_reboot()
+            machine.idle()
+            time.sleep_ms(100)
+    except Exception as e:
+        print('MAIN EXC:', e)
+        try:
+            import sys
+            sys.print_exception(e)
+        except Exception:
+            pass
+        time.sleep_ms(200)
+        hard_reset('main exception')
