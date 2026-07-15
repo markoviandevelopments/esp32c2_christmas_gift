@@ -191,23 +191,25 @@ PHOTO_HOST = 'neontetra.immenseaccumulationonline.online'
 PHOTO_PORT = 80
 
 # === Hang prevention ===
-# urequests timeouts are unreliable on ESP32 and often freeze mid-download.
-# Use raw sockets + short settimeout, hardware WDT, and a 5-minute reboot.
+# urequests timeouts are unreliable on ESP32 — use raw sockets + settimeout.
+# WDT + 5-minute reboot recover from true hangs, but must NOT reboot-loop:
+#  - WDT >= 8s (bit-bang SPI + DNS need time between feeds)
+#  - no hard-reset on low free RAM or transient WiFi blips
+#  - skip slow per-pixel "LOADING..." text (trips WDT before any photo)
 BOOT_MS = time.ticks_ms()
 REBOOT_MS = 5 * 60 * 1000          # forced reboot every 5 minutes
-SOCK_TIMEOUT = 2.5                 # seconds per socket op
-CHUNK_RETRIES = 2
-MAX_FAIL_STREAK = 3
-MIN_FREE_MEM = 8000
+SOCK_TIMEOUT = 4.0                 # seconds per socket op
+CHUNK_RETRIES = 3
+MAX_FAIL_STREAK = 5
 _wdt = None
 _resolved = None                   # cached (ip, port) tuple
 
 def start_wdt():
-    """Start hardware watchdog ASAP; shorter = faster hang recovery."""
+    """Hardware watchdog with a timeout safe for normal drawing."""
     global _wdt
     if _wdt is not None:
         return
-    for ms in (3000, 5000, 8000):
+    for ms in (8000, 5000):
         try:
             _wdt = machine.WDT(timeout=ms)
             print('WDT started, timeout_ms=', ms)
@@ -233,6 +235,7 @@ def maybe_periodic_reboot():
         hard_reset('5-minute uptime')
 
 def ensure_wifi():
+    """Return True/False. Do not hard-reset here (avoids reboot loops)."""
     feed_wdt()
     sta = network.WLAN(network.STA_IF)
     if sta.isconnected():
@@ -242,26 +245,28 @@ def ensure_wifi():
         ssid = open('/ssid.txt').read().strip()
         pw = open('/pass.txt').read().strip()
     except OSError:
-        hard_reset('no wifi creds')
+        print('no wifi creds on disk')
+        return False
     try:
         if not sta.active():
             sta.active(True)
-        sta.disconnect()
-    except Exception:
-        pass
-    try:
+        try:
+            sta.disconnect()
+        except Exception:
+            pass
         sta.connect(ssid, pw)
     except Exception as e:
         print('wifi connect err', e)
-        hard_reset('wifi connect err')
-    for _ in range(20):
+        return False
+    for _ in range(30):
         feed_wdt()
         maybe_periodic_reboot()
         if sta.isconnected():
             print('WiFi ok', sta.ifconfig()[0])
             return True
         time.sleep_ms(300)
-    hard_reset('wifi reconnect failed')
+    print('wifi reconnect failed')
+    return False
 
 def resolve_host():
     """DNS resolve with WDT protection; cache result."""
@@ -359,12 +364,11 @@ CHUNK_BYTES = 512
 def update_photo():
     feed_wdt()
     maybe_periodic_reboot()
-    ensure_wifi()
+    if not ensure_wifi():
+        print('update_photo: no wifi')
+        return False
     gc.collect()
-    free = gc.mem_free()
-    print('update_photo free=', free)
-    if free < MIN_FREE_MEM:
-        hard_reset('low memory')
+    print('update_photo free=', gc.mem_free())
 
     set_window(0, 0, 239, 239)
     pixel_index = 0
@@ -380,24 +384,23 @@ def update_photo():
             if data is not None and len(data) == CHUNK_BYTES:
                 break
             data = None
-            # Brief backoff; re-check WiFi on last try
             time.sleep_ms(100 + attempt * 150)
-            if attempt == CHUNK_RETRIES - 1:
+            if attempt >= 1:
                 ensure_wifi()
             gc.collect()
+            feed_wdt()
 
         if data is None:
             print('chunk fail', chunk_n)
             return False
 
-        # Stream pixels to panel immediately; feed WDT mid-chunk
+        # Stream pixels; feed WDT often (bit-bang is slow on C2)
         for i in range(0, CHUNK_BYTES, 2):
-            if (i & 0x3F) == 0:
+            if (i & 0x1F) == 0:
                 feed_wdt()
             send_pixel_pair(data[i], data[i + 1])
             pixel_index += 1
 
-        # Drop reference ASAP; reclaim every few chunks
         data = None
         if (chunk_n & 0x0F) == 0:
             gc.collect()
@@ -454,9 +457,10 @@ font = {
 }
 
 def draw_text(x_start, y_start, text):
-    # your existing draw_text function stays exactly the same
+    # Per-pixel set_window is slow on bit-bang SPI — feed WDT every character
     x = x_start
     for char in text.upper():
+        feed_wdt()
         if char in font:
             bitmap = font[char]
             for col in range(5):
@@ -468,7 +472,7 @@ def draw_text(x_start, y_start, text):
                         send_byte(0xFF, 1)
             x += 6
 
-# === Main loop: WDT + 5-min reboot + never sit hung ===
+# === Main loop: WDT + 5-min reboot; avoid reboot loops ===
 start_wdt()
 feed_wdt()
 fail_streak = 0
@@ -478,32 +482,31 @@ while True:
         feed_wdt()
         maybe_periodic_reboot()
         gc.collect()
-        set_window(0, 0, 239, 239)
-        draw_text(90, 110, "LOADING...")
-        print('=== photo update ===')
+        # Do not draw "LOADING..." — per-pixel windows trip WDT before photos start.
+        print('=== photo update free=', gc.mem_free())
         if update_photo():
             fail_streak = 0
             print('Photo SUCCESS')
-            # Keep success text minimal (saves time/heap)
+            feed_wdt()
             draw_text(80, 100, "ENJOY!!!")
         else:
             fail_streak += 1
             print('Photo FAIL streak', fail_streak)
+            feed_wdt()
             draw_text(40, 100, "NO PHOTO")
+            feed_wdt()
             draw_text(20, 130, "CHECK SERVER")
             if fail_streak >= MAX_FAIL_STREAK:
                 hard_reset('fail streak')
-            # Short pause then retry quickly instead of sitting on error
             t0 = time.ticks_ms()
-            while time.ticks_diff(time.ticks_ms(), t0) < 1500:
+            while time.ticks_diff(time.ticks_ms(), t0) < 2000:
                 feed_wdt()
                 maybe_periodic_reboot()
                 time.sleep_ms(100)
             continue
 
-        # Brief dwell between full frames (~3s); keep WDT alive
         t0 = time.ticks_ms()
-        while time.ticks_diff(time.ticks_ms(), t0) < 3000:
+        while time.ticks_diff(time.ticks_ms(), t0) < 4000:
             feed_wdt()
             maybe_periodic_reboot()
             machine.idle()
@@ -515,5 +518,8 @@ while True:
             sys.print_exception(e)
         except Exception:
             pass
-        time.sleep_ms(200)
+        t0 = time.ticks_ms()
+        while time.ticks_diff(time.ticks_ms(), t0) < 2000:
+            feed_wdt()
+            time.sleep_ms(100)
         hard_reset('main exception')
