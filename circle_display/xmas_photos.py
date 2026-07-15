@@ -22,11 +22,19 @@ PIXELS_TOTAL = TARGET_SIZE * TARGET_SIZE
 BYTES_PER_PIXEL = 2
 CHUNK_SIZE = CHUNK_PIXELS * BYTES_PER_PIXEL
 
-# Thread-safe lock (though less needed now)
+# Thread-safe lock for per-device image sessions
 client_lock = threading.Lock()
 
-# Per-client current photo (mac → {'raw_bytes': bytes, 'last_access': float, 'path': str})
+# Per-client sticky photo for the whole 0..N-1 transfer.
+# mac → {
+#   'raw_bytes': bytes, 'path': str, 'last_access': float,
+#   'last_n': int, 'completed': bool, 'started': float
+# }
 client_current_photo = {}
+
+# How long an incomplete transfer may sit idle before a new image is allowed.
+# Long enough for slow ESP32-C2 chunked draws (225 × HTTP).
+SESSION_STALE_SEC = 180
 
 # MAC to directory key mapping
 mac_to_key = {
@@ -90,6 +98,16 @@ def index():
         <p>Use: <code>/pixel?n=0&mac=XX:XX:XX:XX:XX:XX</code> ... <code>/pixel?n={PIXELS_TOTAL//CHUNK_PIXELS - 1}&mac=XX:XX:XX:XX:XX:XX</code></p>
     """
 
+def _session_is_active(session, now):
+    """True if this MAC still owns an in-progress image we must keep serving."""
+    if not session or session.get('raw_bytes') is None:
+        return False
+    if session.get('completed'):
+        return False
+    if now - session.get('last_access', 0) > SESSION_STALE_SEC:
+        return False
+    return True
+
 @app.route('/pixel')
 def serve_pixel_chunk():
     n_str = request.args.get('n')
@@ -115,22 +133,70 @@ def serve_pixel_chunk():
     if not image_files:
         abort(503, f"No photos found in {dir_key}")
 
+    now = time.time()
+    # Convert new images outside the lock (slow PIL work) after deciding we need one.
+    pending_path = None
+    pending_raw = None
+
     with client_lock:
-        # Choose new photo only on first chunk (n==0)
+        session = client_current_photo.get(mac)
+        need_new = False
+
         if n == 0:
-            chosen_path = random.choice(image_files)
-            client_current_photo[mac] = {
-                'raw_bytes': image_to_rgb565_bytes(chosen_path),
-                'last_access': time.time(),
-                'path': chosen_path  # for logging
-            }
-            short_name = os.path.basename(chosen_path)
-            print(f"[{request.remote_addr}] MAC {mac} → {dir_key} : {short_name}")
+            # New image only when no active transfer for this MAC.
+            # Re-requesting n=0 mid-draw (retry/reboot) keeps the SAME picture
+            # so the screen never splices two photos together.
+            if not _session_is_active(session, now):
+                need_new = True
+            else:
+                session['last_access'] = now
+                session['last_n'] = 0
+                print(f"[{request.remote_addr}] MAC {mac} → reusing in-progress "
+                      f"{os.path.basename(session.get('path', '?'))}")
+        else:
+            if not session or session.get('raw_bytes') is None:
+                abort(500, "Start with n=0 or image conversion failed")
+            if now - session.get('last_access', 0) > SESSION_STALE_SEC:
+                # Stale mid-transfer — force client to restart at n=0
+                client_current_photo.pop(mac, None)
+                abort(409, "Session expired; restart from n=0")
+
+        if need_new:
+            pending_path = random.choice(image_files)
+
+    if pending_path is not None:
+        pending_raw = image_to_rgb565_bytes(pending_path)
+        if pending_raw is None:
+            abort(500, "Image conversion failed")
+
+    with client_lock:
+        if pending_path is not None:
+            # Re-check: another request may have installed a session while we converted
+            session = client_current_photo.get(mac)
+            if n == 0 and _session_is_active(session, time.time()):
+                # Prefer the session already serving this device
+                pass
+            else:
+                client_current_photo[mac] = {
+                    'raw_bytes': pending_raw,
+                    'path': pending_path,
+                    'last_access': time.time(),
+                    'last_n': 0,
+                    'completed': False,
+                    'started': time.time(),
+                }
+                print(f"[{request.remote_addr}] MAC {mac} → {dir_key} : "
+                      f"{os.path.basename(pending_path)} (new session)")
 
         client_data = client_current_photo.get(mac)
         if not client_data or client_data.get('raw_bytes') is None:
             abort(500, "Start with n=0 or image conversion failed")
+
         client_data['last_access'] = time.time()
+        client_data['last_n'] = n
+        if n >= max_chunk:
+            client_data['completed'] = True
+
         raw_bytes = client_data['raw_bytes']
         start = n * CHUNK_SIZE
         chunk = raw_bytes[start : start + CHUNK_SIZE]
@@ -142,9 +208,10 @@ def serve_pixel_chunk():
 def cleanup_old_clients():
     while True:
         now = time.time()
+        # Drop idle sessions (completed or abandoned). Active draws refresh last_access.
         to_remove = [
             mac for mac, data in list(client_current_photo.items())
-            if now - data.get('last_access', 0) > 600  # 10 minutes
+            if now - data.get('last_access', 0) > max(600, SESSION_STALE_SEC * 2)
         ]
         with client_lock:
             for mac in to_remove:
