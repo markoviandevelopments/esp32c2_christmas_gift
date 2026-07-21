@@ -371,35 +371,41 @@ def sync_github():
                 print(f'[{time.strftime("%H:%M:%S")}] Cloning repo...')
                 git.Repo.clone_from(REPO_URL, REPO_DIR, branch='main')
 
-            # Normal crypto screens
-            if os.path.isfile(SECONDARY_PY):
-                subprocess.run([MPY_CROSS_PATH, '-march=rv32imc', SECONDARY_PY, '-o', SECONDARY_MPY])
-            if os.path.isfile(TERTIARY_PY):
-                subprocess.run([MPY_CROSS_PATH, '-march=rv32imc', TERTIARY_PY, '-o', TERTIARY_MPY])
-            if os.path.isfile(BOOT_PY):
-                subprocess.run([MPY_CROSS_PATH, '-march=rv32imc', BOOT_PY, '-o', BOOT_MPY])
+            # === Compile ALL device firmware (log every target) ===
+            # boot.py  = rectangular screens (flash as SOURCE /boot.py on device)
+            # boot2.py = circle screens
+            # secondary.mpy / tertiary.mpy = app code pulled over HTTP after WiFi
+            def _compile_mpy(src, dst, label):
+                if not os.path.isfile(src):
+                    print(f'[{time.strftime("%H:%M:%S")}] ⚠️  missing {label}: {src}')
+                    return False
+                if not os.path.isfile(MPY_CROSS_PATH):
+                    print(f'[{time.strftime("%H:%M:%S")}] ❌ mpy-cross not found: {MPY_CROSS_PATH}')
+                    return False
+                result = subprocess.run(
+                    [MPY_CROSS_PATH, '-march=rv32imc', src, '-o', dst],
+                    capture_output=True, text=True,
+                )
+                if result.returncode == 0 and os.path.isfile(dst):
+                    print(f'[{time.strftime("%H:%M:%S")}] ✅ Compiled {label} → {os.path.basename(dst)} ({os.path.getsize(dst)} bytes)')
+                    return True
+                print(f'[{time.strftime("%H:%M:%S")}] ❌ Failed {label}: rc={result.returncode} {result.stderr[-200:] if result.stderr else ""}')
+                return False
 
-            # === Round-screen boot (boot2.py → boot2.mpy) ===
+            _compile_mpy(BOOT_PY, BOOT_MPY, 'boot.py (rect screens)')
+            _compile_mpy(SECONDARY_PY, SECONDARY_MPY, 'secondary.py (rect app)')
+            _compile_mpy(TERTIARY_PY, TERTIARY_MPY, 'tertiary.py (circle app)')
+
             CIRCLE_BOOT_PY = os.path.join(REPO_DIR, 'circle_display', 'boot2.py')
             BOOT2_MPY = os.path.join(REPO_DIR, 'boot2.mpy')
-            BOOT2_PY  = os.path.join(REPO_DIR, 'boot2.py')
-
-            if os.path.isfile(CIRCLE_BOOT_PY):
-                result = subprocess.run([MPY_CROSS_PATH, '-march=rv32imc', CIRCLE_BOOT_PY, '-o', BOOT2_MPY])
-                if result.returncode == 0:
-                    print(f'[{time.strftime("%H:%M:%S")}] ✅ Compiled circle_display/boot2.py → boot2.mpy')
-                else:
-                    print(f'[{time.strftime("%H:%M:%S")}] ❌ Failed to compile circle_display/boot2.py')
-
-                # Copy source so /boot2.py route works
+            BOOT2_PY = os.path.join(REPO_DIR, 'boot2.py')
+            if _compile_mpy(CIRCLE_BOOT_PY, BOOT2_MPY, 'circle_display/boot2.py (circle boot)'):
                 try:
                     import shutil
                     shutil.copy2(CIRCLE_BOOT_PY, BOOT2_PY)
-                    print(f'[{time.strftime("%H:%M:%S")}] ✅ Copied boot2.py source')
+                    print(f'[{time.strftime("%H:%M:%S")}] ✅ Copied circle boot2.py source → boot2.py')
                 except Exception as e:
                     print(f'[{time.strftime("%H:%M:%S")}] Warning copying boot2.py: {e}')
-            else:
-                print(f'[{time.strftime("%H:%M:%S")}] ⚠️  circle_display/boot2.py not found')
 
         except Exception as e:
             print(f'[{time.strftime("%H:%M:%S")}] Sync error: {e}')
@@ -433,6 +439,12 @@ def serve_secondary_mpy():
 def serve_boot_mpy():
     if not os.path.isfile(BOOT_MPY): abort(404)
     return send_file(BOOT_MPY, mimetype='application/octet-stream')
+
+@app.route('/boot.py')
+def serve_boot_py_source():
+    """Rect screens need SOURCE boot.py flashed to the device."""
+    if not os.path.isfile(BOOT_PY): abort(404)
+    return send_file(BOOT_PY, mimetype='text/plain')
 
 @app.route('/tertiary.mpy')
 def serve_tertiary_mpy():
