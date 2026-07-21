@@ -1,12 +1,16 @@
-# boot.py — Rectangular crypto screens (ST7735) on ESP32-C2
+# boot.py — Rectangular crypto screens (ESP32-C2 + ST7735)
 #
-# Flow: BLE provision → fully stop BLE → WiFi → download secondary.mpy → import
+# Flash as SOURCE text:  ampy put boot.py /boot.py
+# MicroPython only auto-runs /boot.py (not boot.mpy).
 #
-# Cloudflare hostnames (e.g. update.immenseaccumulationonline.online) map to
-# desktop ports on the tunnel side (update → :9019). Devices always use
-# http://hostname with NO :8080 / :9019 in the URL.
+# After BLE wifi creds:
+#   1) stop advertising (do NOT ble.active(False) — hangs on many C2 builds)
+#   2) connect WiFi
+#   3) download secondary.mpy (LAN first, then Cloudflare hostnames)
+#   4) import secondary
 #
-# IMPORTANT: Flash this file as SOURCE /boot.py (not .mpy). MicroPython runs boot.py.
+# Cloudflare: update.immenseaccumulationonline.online → desktop :9019
+# Devices use http://hostname with no port. Port field "8080" is ignored for CF hosts.
 import asyncio
 import bluetooth
 import gc
@@ -14,8 +18,12 @@ import machine
 import network
 import os
 import time
-import urequests
 import binascii
+
+try:
+    import usocket as socket
+except ImportError:
+    import socket
 
 gc.collect()
 
@@ -23,7 +31,9 @@ mac_bytes = machine.unique_id()
 mac_str = ':'.join(['{:02X}'.format(b) for b in mac_bytes])
 print('=== XH-C2X RECT boot ===')
 print(mac_str)
+print('free', gc.mem_free())
 
+# BLE UUIDs (must match ble_provisioner)
 _SERVICE_UUID = bluetooth.UUID('12345678-1234-1234-1234-123456789abc')
 _SSID_UUID = bluetooth.UUID('87654321-4321-4321-4321-cba987654321')
 _PASS_UUID = bluetooth.UUID('cba98765-4321-4321-4321-123456789abc')
@@ -36,7 +46,7 @@ _IRQ_GATTS_WRITE = 3
 
 ble = bluetooth.BLE()
 ble.active(True)
-print('BLE activated, free=', gc.mem_free())
+print('BLE on free', gc.mem_free())
 gc.collect()
 
 connected = False
@@ -46,44 +56,46 @@ provisioned_server_ip = 'update.immenseaccumulationonline.online'
 provisioned_server_port = ''
 
 ssid_handle = pass_handle = server_ip_handle = server_port_handle = None
-MIN_SECONDARY_BYTES = 2000
+MIN_MPY = 2000
+
+# Desktop on the same LAN as BrubakerWifi2 (x_mas_server :9019)
+LAN_OTA_BASES = (
+    'http://192.168.1.219:9019',
+)
 
 
 def ble_irq(event, data):
-    global connected, provisioned_ssid, provisioned_pass, provisioned_server_ip, provisioned_server_port
+    global connected, provisioned_ssid, provisioned_pass
+    global provisioned_server_ip, provisioned_server_port
     if event == _IRQ_CENTRAL_CONNECT:
-        print('BLE central connected')
         connected = True
+        print('BLE phone connected')
     elif event == _IRQ_CENTRAL_DISCONNECT:
-        print('BLE central disconnected')
         connected = False
+        print('BLE phone disconnected')
     elif event == _IRQ_GATTS_WRITE:
-        conn_handle, value_handle = data
         try:
-            value = ble.gatts_read(value_handle)
+            value = ble.gatts_read(data[1])
             decoded = value.decode('utf-8').rstrip('\x00')
-            if value_handle == ssid_handle:
+            h = data[1]
+            if h == ssid_handle:
                 provisioned_ssid = decoded
-                with open('/ssid.txt', 'w') as f:
-                    f.write(decoded)
-                print('SSID saved')
-            elif value_handle == pass_handle:
+                open('/ssid.txt', 'w').write(decoded)
+                print('SSID ok')
+            elif h == pass_handle:
                 provisioned_pass = decoded
-                with open('/pass.txt', 'w') as f:
-                    f.write(decoded)
-                print('Password saved')
-            elif value_handle == server_ip_handle:
+                open('/pass.txt', 'w').write(decoded)
+                print('PASS ok')
+            elif h == server_ip_handle:
                 provisioned_server_ip = decoded
-                with open('/server_ip.txt', 'w') as f:
-                    f.write(decoded)
-                print('Server host saved:', decoded)
-            elif value_handle == server_port_handle:
+                open('/server_ip.txt', 'w').write(decoded)
+                print('HOST ok', decoded)
+            elif h == server_port_handle:
                 provisioned_server_port = decoded
-                with open('/server_port.txt', 'w') as f:
-                    f.write(decoded)
-                print('Server port field saved:', decoded)
+                open('/server_port.txt', 'w').write(decoded)
+                print('PORT field ok', decoded)
         except Exception as e:
-            print('IRQ error:', e)
+            print('IRQ', e)
 
 
 ble.irq(ble_irq)
@@ -100,36 +112,118 @@ def register_services():
     handles = ble.gatts_register_services([(_SERVICE_UUID, chars)])[0]
     ssid_handle, pass_handle, server_ip_handle, server_port_handle = handles
     ble.gatts_set_buffer(server_ip_handle, 80)
-    print('BLE services registered')
+    print('services ok')
 
 
 register_services()
 gc.collect()
 
 
-def stop_ble():
-    """Turn BLE fully off. On C2, WiFi+BLE concurrent often breaks HTTP."""
-    global ble
+def stop_adv():
+    """Stop advertising only. Never ble.active(False) — freezes many C2 builds."""
     try:
         ble.gap_advertise(None)
     except Exception:
         pass
-    try:
-        ble.active(False)
-    except Exception:
-        pass
     gc.collect()
-    print('BLE off, free=', gc.mem_free())
+    print('adv off free', gc.mem_free())
 
 
-async def connect_wifi(ssid, password, tries=40):
-    print('WiFi connect free=', gc.mem_free())
+def http_get_bytes(url, timeout_s=20):
+    """Minimal HTTP/1.0 GET via usocket (more reliable than urequests on C2)."""
+    # url: http://host[:port]/path
+    if not url.startswith('http://'):
+        raise ValueError('only http')
+    rest = url[7:]
+    hostpath = rest.split('/', 1)
+    hostport = hostpath[0]
+    path = '/' + hostpath[1] if len(hostpath) > 1 else '/'
+    if ':' in hostport:
+        host, ports = hostport.split(':', 1)
+        port = int(ports)
+    else:
+        host = hostport
+        port = 80
+    print('socket GET', host, port, path)
+    ai = socket.getaddrinfo(host, port, 0, socket.SOCK_STREAM)
+    addr = ai[0][-1]
+    s = socket.socket()
+    s.settimeout(timeout_s)
+    try:
+        s.connect(addr)
+        req = b'GET %s HTTP/1.0\r\nHost: %s\r\nConnection: close\r\n\r\n' % (
+            path.encode(), host.encode())
+        s.send(req)
+        buf = b''
+        while True:
+            try:
+                chunk = s.recv(1024)
+            except OSError:
+                break
+            if not chunk:
+                break
+            buf += chunk
+            # cap (secondary.mpy ~10KB; allow headroom)
+            if len(buf) > 40000:
+                break
+    finally:
+        try:
+            s.close()
+        except Exception:
+            pass
+    if b'\r\n\r\n' not in buf:
+        raise OSError('no headers')
+    header, body = buf.split(b'\r\n\r\n', 1)
+    status = header.split(b'\r\n', 1)[0]
+    if b' 200' not in status:
+        raise OSError('http ' + status.decode('utf-8', 'ignore'))
+    return body
+
+
+def ota_url_list():
+    """Order matters: LAN desktop first (works offline of Cloudflare), then CF hosts."""
+    urls = []
+    for base in LAN_OTA_BASES:
+        urls.append(base + '/secondary.mpy')
+    hosts = []
+    h0 = (provisioned_server_ip or '').strip()
+    if h0:
+        hosts.append(h0)
+    for h in (
+        'update.immenseaccumulationonline.online',
+        'ghostshrimp.immenseaccumulationonline.online',
+    ):
+        if h not in hosts:
+            hosts.append(h)
+    for h in hosts:
+        # CF / domain: never append :8080
+        if h.endswith('immenseaccumulationonline.online') or not h[0].isdigit():
+            # if it looks like an IP, allow real port
+            if h.replace('.', '').isdigit():
+                port = (provisioned_server_port or '').strip()
+                if port and port not in ('80', '443', '8080'):
+                    urls.append('http://%s:%s/secondary.mpy' % (h, port))
+                else:
+                    urls.append('http://%s/secondary.mpy' % h)
+            else:
+                urls.append('http://%s/secondary.mpy' % h)
+        else:
+            urls.append('http://%s/secondary.mpy' % h)
+    # de-dupe preserve order
+    out = []
+    for u in urls:
+        if u not in out:
+            out.append(u)
+    return out
+
+
+async def connect_wifi(ssid, password, tries=45):
     sta = network.WLAN(network.STA_IF)
     if not sta.active():
         sta.active(True)
-        await asyncio.sleep_ms(300)
+        await asyncio.sleep_ms(400)
     if sta.isconnected():
-        print('Already on WiFi', sta.ifconfig()[0])
+        print('wifi already', sta.ifconfig())
         return True
     try:
         try:
@@ -137,116 +231,83 @@ async def connect_wifi(ssid, password, tries=40):
         except Exception:
             pass
         await asyncio.sleep_ms(200)
+        print('wifi connect', ssid)
         sta.connect(ssid, password)
     except Exception as e:
-        print('WiFi connect err', e)
+        print('wifi err', e)
         return False
-    print('Connecting WiFi...')
     for i in range(tries):
         if sta.isconnected():
-            print('WiFi OK', sta.ifconfig())
+            print('wifi OK', sta.ifconfig())
             return True
         await asyncio.sleep(1)
-        if i % 5 == 4:
-            print('  still waiting WiFi...', i + 1)
-    print('WiFi failed')
+        if (i + 1) % 10 == 0:
+            print('wifi wait', i + 1)
+    print('wifi FAIL')
     return False
 
 
-def server_base_url(host=None, port=None):
-    if host is None:
-        host = provisioned_server_ip
-    if port is None:
-        port = provisioned_server_port
-    host = (host or 'update.immenseaccumulationonline.online').strip()
-    port = (port or '').strip()
-    # Cloudflare tunnel public names → always port 80 (no suffix)
-    if host.endswith('immenseaccumulationonline.online'):
-        return 'http://' + host
-    if port in ('', '80', '443', '8080'):
-        return 'http://' + host
-    return 'http://%s:%s' % (host, port)
-
-
-def has_local_secondary():
+def has_secondary():
     try:
-        return os.stat('/secondary.mpy')[6] >= MIN_SECONDARY_BYTES
+        return os.stat('/secondary.mpy')[6] >= MIN_MPY
     except OSError:
         return False
 
 
 async def download_secondary():
-    """Fetch secondary.mpy. Prefer update host (desktop :9019 via CF)."""
-    hosts = []
-    for h in (
-        (provisioned_server_ip or '').strip(),
-        'update.immenseaccumulationonline.online',
-        'ghostshrimp.immenseaccumulationonline.online',
-    ):
-        if h and h not in hosts:
-            hosts.append(h)
-
-    print('download free=', gc.mem_free())
-    for host in hosts:
-        url = server_base_url(host, provisioned_server_port) + '/secondary.mpy'
-        print('GET', url)
-        for attempt in range(4):
+    urls = ota_url_list()
+    print('OTA candidates', len(urls), 'free', gc.mem_free())
+    for url in urls:
+        for attempt in range(3):
             try:
-                # Confirm WiFi still up
                 sta = network.WLAN(network.STA_IF)
                 if not sta.isconnected():
-                    print('WiFi dropped before download')
+                    print('wifi down')
                     return False
-                resp = urequests.get(url, timeout=20)
-                code = resp.status_code
-                data = resp.content
-                try:
-                    resp.close()
-                except Exception:
-                    pass
-                if code == 200 and data and len(data) >= MIN_SECONDARY_BYTES and data[0:1] == b'M':
+                print('try', url, 'n', attempt)
+                body = http_get_bytes(url, timeout_s=25)
+                if body and len(body) >= MIN_MPY and body[0:1] == b'M':
                     with open('/secondary.mpy.tmp', 'wb') as f:
-                        f.write(data)
+                        f.write(body)
                     try:
                         os.remove('/secondary.mpy')
                     except OSError:
                         pass
                     os.rename('/secondary.mpy.tmp', '/secondary.mpy')
-                    print('OK secondary.mpy', len(data), 'from', host)
+                    print('saved secondary.mpy', len(body))
                     return True
-                print('bad response', code, len(data) if data else 0)
+                print('bad body', len(body) if body else 0)
             except Exception as e:
-                print('download err', attempt, e)
+                print('ota err', e)
             gc.collect()
-            await asyncio.sleep(2)
+            await asyncio.sleep(1)
     return False
 
 
-async def reboot_soon(reason, seconds=15):
-    print(reason, '- reset in', seconds, 's')
-    await asyncio.sleep(seconds)
+async def reboot_soon(msg, sec=12):
+    print(msg, 'reset', sec)
+    await asyncio.sleep(sec)
     machine.reset()
 
 
 async def run_secondary():
-    # BLE must already be off before this (WiFi exclusive on C2).
-    had = has_local_secondary()
+    had = has_secondary()
     ok = await download_secondary()
     if not ok:
-        if had or has_local_secondary():
-            print('Using cached secondary.mpy')
+        if had:
+            print('using cache secondary.mpy')
         else:
             await reboot_soon('no secondary.mpy')
             return
-
     gc.collect()
-    print('import free=', gc.mem_free())
+    print('import free', gc.mem_free())
     try:
         import secondary
         print('secondary running')
-        await reboot_soon('secondary returned', 10)
+        # secondary owns forever; if it returns:
+        await reboot_soon('secondary returned', 8)
     except Exception as e:
-        print('import failed', e)
+        print('import fail', e)
         try:
             import sys
             sys.print_exception(e)
@@ -257,26 +318,21 @@ async def run_secondary():
                 os.remove('/secondary.mpy')
             except OSError:
                 pass
-        await reboot_soon('import failed')
+        await reboot_soon('import fail')
 
 
-async def go_online_and_run():
-    """Shared path: kill BLE, join WiFi, pull secondary."""
-    stop_ble()
-    # Let radio fully release BLE before STA
-    await asyncio.sleep_ms(800)
-    ssid = provisioned_ssid
-    pw = provisioned_pass
-    if not ssid or not pw:
-        await reboot_soon('missing wifi creds')
+async def go_online():
+    stop_adv()
+    await asyncio.sleep_ms(500)
+    if not provisioned_ssid or not provisioned_pass:
+        await reboot_soon('no wifi creds')
         return
-    for attempt in range(3):
-        if await connect_wifi(ssid, pw, tries=40):
-            # DNS / DHCP settle — without this, first HTTP often fails on C2
-            await asyncio.sleep(2)
+    for n in range(4):
+        if await connect_wifi(provisioned_ssid, provisioned_pass):
+            await asyncio.sleep(2)  # DHCP/DNS settle
             await run_secondary()
             return
-        print('WiFi attempt', attempt + 1, 'failed')
+        print('wifi retry', n + 1)
         await asyncio.sleep(2)
     await reboot_soon('wifi failed')
 
@@ -285,32 +341,27 @@ async def advertise_and_provision():
     global connected
     name = b'XH-C2X'
     name_ad = bytes([len(name) + 1, 0x09]) + name
-    adv_data = bytearray([0x02, 0x01, 0x06]) + name_ad + bytes([0x11, 0x07]) + bytes.fromhex(
-        'bc9a7856341234123412341278563412'
-    )
-    resp_data = bytearray(name_ad)
+    adv = bytearray([0x02, 0x01, 0x06]) + name_ad
+    adv += bytes([0x11, 0x07]) + bytes.fromhex('bc9a7856341234123412341278563412')
+    resp = bytearray(name_ad)
 
     while True:
-        ble.gap_advertise(100_000, adv_data=adv_data, resp_data=resp_data, connectable=True)
-        print('Advertising XH-C2X — provision with BLE app')
+        ble.gap_advertise(100_000, adv_data=adv, resp_data=resp, connectable=True)
+        print('Advertising XH-C2X')
         while not connected:
             await asyncio.sleep_ms(100)
-        print('Phone connected — waiting for SSID/password/host...')
-        start = time.ticks_ms()
-        while time.ticks_diff(time.ticks_ms(), start) < 45000:
+        print('waiting SSID+PASS...')
+        t0 = time.ticks_ms()
+        while time.ticks_diff(time.ticks_ms(), t0) < 60000:
             if provisioned_ssid and provisioned_pass:
-                # Allow time for host/port writes after ssid/pass (WRITE_NO_RESPONSE races)
-                await asyncio.sleep_ms(2000)
-                print('Creds ready host=', provisioned_server_ip, 'port_field=', provisioned_server_port or '(none)')
-                print('OTA base=', server_base_url())
-                await go_online_and_run()
+                # wait for optional host/port writes (app sends after pass)
+                await asyncio.sleep_ms(2500)
+                print('creds ready host=', provisioned_server_ip)
+                await go_online()
                 return
             await asyncio.sleep_ms(100)
-        print('Provision timeout — disconnect and re-advertise')
-        try:
-            ble.gap_advertise(None)
-        except Exception:
-            pass
+        print('provision timeout')
+        stop_adv()
         while connected:
             await asyncio.sleep_ms(100)
 
@@ -318,7 +369,6 @@ async def advertise_and_provision():
 async def main():
     global provisioned_ssid, provisioned_pass, provisioned_server_ip, provisioned_server_port
     gc.collect()
-    print('boot free=', gc.mem_free())
     try:
         provisioned_ssid = open('/ssid.txt').read().strip()
     except OSError:
@@ -337,13 +387,11 @@ async def main():
         pass
 
     if provisioned_ssid and provisioned_pass:
-        print('Saved WiFi found — going online')
-        print('host=', provisioned_server_ip, 'OTA=', server_base_url())
-        await go_online_and_run()
+        print('saved wifi, going online')
+        await go_online()
         return
-
     await advertise_and_provision()
-    await reboot_soon('boot ended', 30)
+    await reboot_soon('boot end', 20)
 
 
 asyncio.run(main())
