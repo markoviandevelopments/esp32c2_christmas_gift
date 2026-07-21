@@ -392,6 +392,20 @@ def serve_tertiary_mpy():
     if not os.path.isfile(TERTIARY_MPY): abort(404)
     return send_file(TERTIARY_MPY, mimetype='application/octet-stream')
 
+@app.route('/boot2.mpy')
+def serve_boot2_mpy():
+    boot2_mpy = os.path.join(REPO_DIR, 'boot2.mpy')
+    if not os.path.isfile(boot2_mpy):
+        abort(404)
+    return send_file(boot2_mpy, mimetype='application/octet-stream')
+
+@app.route('/boot2.py')
+def serve_boot2_py():
+    boot2_py = os.path.join(REPO_DIR, 'boot2.py')
+    if not os.path.isfile(boot2_py):
+        abort(404)
+    return send_file(boot2_py, mimetype='text/plain')
+
 @app.route('/')
 def index():
     return "✅ XH-C2X Full Server running - crypto + round photo endpoints active"
