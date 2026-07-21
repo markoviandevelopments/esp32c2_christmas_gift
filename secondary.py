@@ -268,10 +268,10 @@ def draw_coin_logo(x, y):
     global cached_logo_pixels
     if cached_logo_pixels is None:
         try:
-            r = urequests.get(f'{data_proxy_url}/logo/{coin_endpoint}')
+            r = urequests.get(f'{data_proxy_url}/logo/{coin_endpoint}', timeout=12)
             if r.status_code == 200:
                 text = r.text.strip()
-                if text != "error":
+                if text != "error" and text:
                     cached_logo_pixels = [int(p, 16) for p in text.split(',')]
             r.close()
         except:
@@ -413,30 +413,32 @@ coin = config['coin']
 amount = config['amount']
 coin_endpoint = config['endpoint']
 
-# === ONE-TIME MIGRATION: old public IP → domain (port 80) ===
+# === ONE-TIME MIGRATION: old public IP → update domain ===
 try:
     saved_ip = open('/server_ip.txt').read().strip()
 except OSError:
     saved_ip = '108.254.1.184'
 
-if saved_ip == '108.254.1.184':
-    print("Old public IP detected - migrating to domain (using old IP for download)...")
-    # Download boot.mpy using old public IP (safe)
+if saved_ip in ('108.254.1.184', 'ghostshrimp.immenseaccumulationonline.online'):
+    print("Migrating server host to update.immenseaccumulationonline.online ...")
+    # Best-effort boot refresh from old host (harmless if it fails)
     try:
-        r = urequests.get("http://108.254.1.184:9019/boot.mpy", timeout=20)
+        if saved_ip == '108.254.1.184':
+            r = urequests.get("http://108.254.1.184:9019/boot.mpy", timeout=20)
+        else:
+            r = urequests.get("http://ghostshrimp.immenseaccumulationonline.online/boot.mpy", timeout=20)
         if r.status_code == 200 and len(r.content) > 1000:
             with open('/boot.mpy', 'wb') as f:
                 f.write(r.content)
-            print("Downloaded latest boot.mpy using old IP")
+            print("Downloaded latest boot.mpy during migration")
         r.close()
     except:
         pass
 
-    # Now update config to domain + default port 80 (boot.py will use this)
     with open('/server_ip.txt', 'w') as f:
-        f.write("ghostshrimp.immenseaccumulationonline.online")
+        f.write("update.immenseaccumulationonline.online")
     with open('/server_port.txt', 'w') as f:
-        f.write("80")
+        f.write("8080")
     with open('/ip_updated.txt', 'w') as f:
         f.write("done")
 
@@ -444,20 +446,35 @@ if saved_ip == '108.254.1.184':
     time.sleep(3)
     machine.reset()
 
-# === Normal proxy setup (now always domain or saved value) ===
-try:
-    server_ip = open('/server_ip.txt').read().strip()
-except OSError:
-    server_ip = 'ghostshrimp.immenseaccumulationonline.online'
+# === Data proxy base URL (honors provisioned host + port) ===
+DEFAULT_SERVER_HOST = 'update.immenseaccumulationonline.online'
+DEFAULT_SERVER_PORT = '8080'
 
-data_proxy_url = f'http://{server_ip}'          # default port 80, no :80 needed
+def _build_base_url():
+    try:
+        host = open('/server_ip.txt').read().strip()
+    except OSError:
+        host = ''
+    try:
+        port = open('/server_port.txt').read().strip()
+    except OSError:
+        port = ''
+    if not host:
+        host = DEFAULT_SERVER_HOST
+    # Port 80/empty → bare host (Cloudflare HTTP). 8080 and others → explicit.
+    if port and port not in ('80', '443'):
+        return 'http://%s:%s' % (host, port)
+    return 'http://%s' % host
+
+data_proxy_url = _build_base_url()
 tracking_url = f'{data_proxy_url}/ping'
+print('data_proxy_url =', data_proxy_url)
 
-# === Initial fetch & setup (rest of your code unchanged) ===
+# === Initial fetch & setup ===
 sta = network.WLAN(network.STA_IF)
 start_time = time.ticks_ms()
 last_price = "---"
-last_value = "---"
+last_value = 0.0   # must be float — draw path uses last_value:.2f
 last_time = "--:--:--"
 current_rank = 99
 name_for_mac = {
@@ -511,74 +528,82 @@ def fetch_data():
 # === Main loop ===
 it_C = 0
 while True:
-    current_time = time.ticks_ms()
-    # Reboot every 30 minutes
-    if it_C > 0 and it_C % 30 == 0:
-        machine.reset()
-        it_C = 0
-   
-    fetch_data()
-    # Redraw
-    set_window(0, 0, 159, 79)
-    # for _ in range(160 * 80):
-    # send_byte(0x00, 1)
-    # send_byte(0x00, 1)
-    for _ in range(160 * 80):
-        # Very dark random color (adjust the upper limits for darker/brighter noise)
-        red = random.randint(0, 3) # 0-3 (max 31 for red)
-        green = random.randint(0, 6) # 0-6 (max 63 for green – slightly higher range OK since eye is more sensitive)
-        blue = random.randint(0, 3) # 0-3 (max 31 for blue)
-       
-        color = (red << 11) | (green << 5) | blue
-       
-        send_byte(color >> 8, 1)
-        send_byte(color & 0xFF, 1)
-    draw_text(8, 4, display_name + " " + coin)
-    draw_text(8, 22, f"{coin}:" + last_price)
-    draw_text(8, 42, f"VAL:${last_value:.2f}")
-   
-    string = "ERROR XD" # Fallback
-    r = random.randint(1, 2)
-    # Identify if this device is Chris or Pattie for privacy rules
-    is_chris = mac_str == '34:98:7A:07:06:B4'
-    is_pattie = mac_str == '34:98:7A:07:11:24'
-    if r == 1: # Random other device's rank + abbr
-        if rank_dict and len(rank_dict) > 1:
-            candidates = [m for m in rank_dict if m != mac_str]
-           
-            if is_chris:
-                candidates = [m for m in candidates if m != '34:98:7A:07:11:24']
-            if is_pattie:
-                candidates = [m for m in candidates if m != '34:98:7A:07:06:B4']
-           
-            if candidates:
-                # Fixed syntax + safe indexing
-                idx = random.randint(0, len(candidates) - 1)
-                rand_mac = candidates[idx]
-                abbr = abbr_dict.get(rand_mac, "??")
-                o_rank = rank_dict.get(rand_mac, 99)
-                if o_rank < 99:
-                    string = f"{abbr} AT {o_rank}"
-    elif r == 2:
-        if random.randint(0, 3):
-            string = f"LUK N:{random.randint(0, 99)}"
-        else:
-            string = f"LUK N:{67}"
-       
-    draw_text(8, 62, string)
-   
-    draw_coin_logo(114, 58)
-   
-    if current_rank < 99:
-        draw_rank(str(current_rank), current_rank)
-    if random.randint(1,3) > 0:
+    try:
+        current_time = time.ticks_ms()
+        # Soft reboot every ~30 cycles so WiFi/DNS cannot stay wedged forever
+        if it_C > 0 and it_C % 30 == 0:
+            machine.reset()
+            it_C = 0
+
+        fetch_data()
+        set_window(0, 0, 159, 79)
+        for _ in range(160 * 80):
+            red = random.randint(0, 3)
+            green = random.randint(0, 6)
+            blue = random.randint(0, 3)
+            color = (red << 11) | (green << 5) | blue
+            send_byte(color >> 8, 1)
+            send_byte(color & 0xFF, 1)
+        draw_text(8, 4, display_name + " " + coin)
+        draw_text(8, 22, f"{coin}:" + last_price)
+        try:
+            val_str = f"VAL:${float(last_value):.2f}"
+        except Exception:
+            val_str = "VAL:$---"
+        draw_text(8, 42, val_str)
+
+        string = "ERROR XD"
+        r = random.randint(1, 2)
+        is_chris = mac_str == '34:98:7A:07:06:B4'
+        is_pattie = mac_str == '34:98:7A:07:11:24'
+        if r == 1:
+            if rank_dict and len(rank_dict) > 1:
+                candidates = [m for m in rank_dict if m != mac_str]
+                if is_chris:
+                    candidates = [m for m in candidates if m != '34:98:7A:07:11:24']
+                if is_pattie:
+                    candidates = [m for m in candidates if m != '34:98:7A:07:06:B4']
+                if candidates:
+                    idx = random.randint(0, len(candidates) - 1)
+                    rand_mac = candidates[idx]
+                    abbr = abbr_dict.get(rand_mac, "??")
+                    o_rank = rank_dict.get(rand_mac, 99)
+                    if o_rank < 99:
+                        string = f"{abbr} LT {o_rank}"
+        elif r == 2:
+            if random.randint(0, 3):
+                string = f"LUK N:{random.randint(0, 99)}"
+            else:
+                string = f"LUK N:{67}"
+
+        draw_text(8, 62, string)
+        draw_coin_logo(114, 58)
+
+        if current_rank < 99:
+            draw_rank(str(current_rank), current_rank)
+        if random.randint(1, 3) > 0:
+            while time.ticks_diff(time.ticks_ms(), current_time) < 60000:
+                machine.idle()
+            draw_big_coin_logo()
+            try:
+                draw_text(30, 4, f"VAL:${float(last_value):.2f}")
+            except Exception:
+                draw_text(30, 4, "VAL:$---")
+
+        current_time = time.ticks_ms()
+        it_C += 1
         while time.ticks_diff(time.ticks_ms(), current_time) < 60000:
-            machine.idle() # Yields to WiFi/tasks - prevents network blockage
-        draw_big_coin_logo() # Full-screen every update (covers text/rank—good for splash)
-        draw_text(30, 4, f"VAL:${last_value:.2f}")
-   
-    # Accurate 60-second delay with idle (WiFi-friendly)
-    current_time = time.ticks_ms()
-    it_C += 1
-    while time.ticks_diff(time.ticks_ms(), current_time) < 60000:
-        machine.idle() # Yields to WiFi/tasks - prevents network blockage
+            machine.idle()
+    except Exception as e:
+        print('MAIN EXC:', e)
+        try:
+            import sys
+            sys.print_exception(e)
+        except Exception:
+            pass
+        t0 = time.ticks_ms()
+        while time.ticks_diff(time.ticks_ms(), t0) < 5000:
+            machine.idle()
+        it_C += 1
+        if it_C % 5 == 0:
+            machine.reset()

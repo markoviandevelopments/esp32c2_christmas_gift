@@ -37,8 +37,8 @@ gc.collect()
 connected = False
 provisioned_ssid = None
 provisioned_pass = None
-provisioned_server_ip = 'ghostshrimp.immenseaccumulationonline.online'
-provisioned_server_port = ''
+provisioned_server_ip = 'update.immenseaccumulationonline.online'
+provisioned_server_port = '8080'
 
 ssid_handle = pass_handle = server_ip_handle = server_port_handle = None
 
@@ -113,14 +113,22 @@ async def connect_wifi(ssid, password):
     print('WiFi failed')
     return False
 
+def _server_base_url():
+    """Build http://host or http://host:port from provisioned values."""
+    host = provisioned_server_ip or 'update.immenseaccumulationonline.online'
+    port = (provisioned_server_port or '').strip()
+    if port and port not in ('80', '443'):
+        return 'http://%s:%s' % (host, port)
+    return 'http://%s' % host
+
 async def download_secondary():
-    url = f'http://{provisioned_server_ip}/secondary.mpy'   # NO PORT, pure DNS
+    url = _server_base_url() + '/secondary.mpy'
     print(f'Downloading from {url}')
     print('Free memory before download:', gc.mem_free())
     for attempt in range(5):
         try:
             resp = urequests.get(url, timeout=10)
-            if resp.status_code == 200:
+            if resp.status_code == 200 and resp.content and len(resp.content) > 1000:
                 with open('/secondary.mpy', 'wb') as f:
                     f.write(resp.content)
                 print('Downloaded secondary.mpy (' + str(len(resp.content)) + ' bytes)')
@@ -141,8 +149,8 @@ async def download_secondary():
 
 def has_local_secondary():
     try:
-        os.stat('/secondary.mpy')
-        return True
+        st = os.stat('/secondary.mpy')
+        return st[6] > 1000
     except OSError:
         return False
 
@@ -216,10 +224,10 @@ async def main():
         provisioned_pass = open('/pass.txt').read().strip()
     except OSError: pass
     try:
-        provisioned_server_ip = open('/server_ip.txt').read().strip() or 'ghostshrimp.immenseaccumulationonline.online'
+        provisioned_server_ip = open('/server_ip.txt').read().strip() or 'update.immenseaccumulationonline.online'
     except OSError: pass
     try:
-        provisioned_server_port = open('/server_port.txt').read().strip() or ''
+        provisioned_server_port = open('/server_port.txt').read().strip() or '8080'
     except OSError: pass
 
     if provisioned_ssid and provisioned_pass:

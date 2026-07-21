@@ -109,21 +109,26 @@ def rgb565(r, g, b):
     return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
 
 def load_or_download_logo(coin, url):
+    """Prefer on-disk PNG under logos/; only hit network if missing."""
     local_path = os.path.join(LOGO_DIR, f"{coin}.png")
-    if os.path.exists(local_path):
-        img = Image.open(local_path).convert('RGB')
-    else:
-        r = requests.get(url, timeout=15)
-        r.raise_for_status()
-        img = Image.open(io.BytesIO(r.content)).convert('RGB')
-        img.save(local_path)
-    img = img.resize((20, 20), Image.LANCZOS)
-    pixels = []
-    for y in range(20):
-        for x in range(20):
-            r, g, b = img.getpixel((x, y))
-            pixels.append(f"0x{rgb565(r,g,b):04X}")
-    return ','.join(pixels)
+    try:
+        if os.path.exists(local_path):
+            img = Image.open(local_path).convert('RGB')
+        else:
+            r = requests.get(url, timeout=15, headers={'User-Agent': 'x-mas-gift/1.0'})
+            r.raise_for_status()
+            img = Image.open(io.BytesIO(r.content)).convert('RGB')
+            img.save(local_path)
+        img = img.resize((20, 20), Image.LANCZOS)
+        pixels = []
+        for y in range(20):
+            for x in range(20):
+                r, g, b = img.getpixel((x, y))
+                pixels.append(f"0x{rgb565(r,g,b):04X}")
+        return ','.join(pixels)
+    except Exception as e:
+        print(f'logo load failed for {coin}: {e}')
+        return "error"
 
 def generate_big_logo(coin):
     if coin in cached_big_logos:
@@ -152,26 +157,64 @@ def generate_big_logo(coin):
                     pixels.append(rgb565(r, g, b))
         cached_big_logos[coin] = pixels
         return pixels
-    except:
+    except Exception as e:
+        print(f'biglogo failed for {coin}: {e}')
         return None
+
+def _yahoo_tsla_price():
+    """Fallback when CoinGecko tesla-xstock is missing/rate-limited."""
+    try:
+        r = requests.get(
+            'https://query1.finance.yahoo.com/v8/finance/chart/TSLA?interval=1d&range=1d',
+            timeout=10,
+            headers={'User-Agent': 'Mozilla/5.0'},
+        )
+        r.raise_for_status()
+        meta = r.json()['chart']['result'][0]['meta']
+        price = meta.get('regularMarketPrice') or meta.get('previousClose')
+        if price is not None:
+            return float(price)
+    except Exception as e:
+        print(f'yahoo TSLA fallback failed: {e}')
+    return None
 
 def fetch_data():
     global cached_prices, cached_logos, cached_big_logos
     while True:
         ids = "bitcoin,solana,dogecoin,pepe,ripple,litecoin,tesla-xstock"
         try:
-            r = requests.get(f'https://api.coingecko.com/api/v3/simple/price?ids={ids}&vs_currencies=usd', timeout=10)
+            r = requests.get(
+                f'https://api.coingecko.com/api/v3/simple/price?ids={ids}&vs_currencies=usd',
+                timeout=10,
+            )
             data = r.json()
-            cached_prices['btc'] = f"{data['bitcoin']['usd']:.8f}"
-            cached_prices['sol'] = f"{data['solana']['usd']:.4f}"
-            cached_prices['doge'] = f"{data['dogecoin']['usd']:.6f}"
-            cached_prices['pepe'] = f"{data['pepe']['usd']:.10f}"
-            cached_prices['xrp'] = f"{data['ripple']['usd']:.4f}"
-            cached_prices['ltc'] = f"{data['litecoin']['usd']:.4f}"
-            cached_prices['tsla'] = f"{data['tesla-xstock']['usd']:.2f}"
-        except:
-            pass
+            if 'bitcoin' in data:
+                cached_prices['btc'] = f"{data['bitcoin']['usd']:.8f}"
+            if 'solana' in data:
+                cached_prices['sol'] = f"{data['solana']['usd']:.4f}"
+            if 'dogecoin' in data:
+                cached_prices['doge'] = f"{data['dogecoin']['usd']:.6f}"
+            if 'pepe' in data:
+                cached_prices['pepe'] = f"{data['pepe']['usd']:.10f}"
+            if 'ripple' in data:
+                cached_prices['xrp'] = f"{data['ripple']['usd']:.4f}"
+            if 'litecoin' in data:
+                cached_prices['ltc'] = f"{data['litecoin']['usd']:.4f}"
+            if 'tesla-xstock' in data:
+                cached_prices['tsla'] = f"{data['tesla-xstock']['usd']:.2f}"
+            else:
+                yp = _yahoo_tsla_price()
+                if yp is not None:
+                    cached_prices['tsla'] = f"{yp:.2f}"
+        except Exception as e:
+            print(f'coingecko fetch failed: {e}')
+            # Keep last good crypto prices; still try Yahoo for TSLA
+            if cached_prices.get('tsla') in (None, 'error'):
+                yp = _yahoo_tsla_price()
+                if yp is not None:
+                    cached_prices['tsla'] = f"{yp:.2f}"
 
+        # Local logos preferred; remote URLs only for first-time seed if file missing
         logo_urls = {
             'btc': 'https://cryptologos.cc/logos/bitcoin-btc-logo.png',
             'sol': 'https://cryptologos.cc/logos/solana-sol-logo.png',
@@ -182,10 +225,14 @@ def fetch_data():
             'tsla': 'https://upload.wikimedia.org/wikipedia/commons/e/e8/Tesla_logo.png',
         }
         for coin, url in logo_urls.items():
-            if coin not in cached_logos:
-                cached_logos[coin] = load_or_download_logo(coin, url)
+            if coin not in cached_logos or cached_logos.get(coin) == "error":
+                try:
+                    cached_logos[coin] = load_or_download_logo(coin, url)
+                except Exception as e:
+                    print(f'logo cache {coin}: {e}')
             generate_big_logo(coin)
         time.sleep(180)
+
 
 # === ROUTES ===
 @app.route('/<coin>')
