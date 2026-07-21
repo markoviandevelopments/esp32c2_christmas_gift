@@ -206,12 +206,13 @@ async def download_tertiary():
 
 
 async def run_tertiary():
-    # Prefer network OTA, but always fall back to last good tertiary.mpy on flash.
-    # Old boot2 would exit idle when download failed — that left screens dead after soft reset.
+    # Boot is flashed once; only tertiary.mpy is OTA'd.
+    # Prefer a quick OTA, but if it fails use last good cache so reboot #2+ still works.
     stop_ble()
+    had_cache = has_local_tertiary()
     downloaded = await download_tertiary()
     if not downloaded:
-        if has_local_tertiary():
+        if had_cache or has_local_tertiary():
             print('Using cached /tertiary.mpy')
         else:
             await reboot_soon('No tertiary.mpy available', 15)
@@ -232,6 +233,13 @@ async def run_tertiary():
         except Exception:
             pass
         print('Free memory after failed import:', gc.mem_free())
+        # Bad OTA can leave a broken tertiary.mpy — remove it so next boot re-downloads
+        if downloaded:
+            try:
+                os.remove('/tertiary.mpy')
+                print('Removed bad tertiary.mpy after import fail')
+            except OSError:
+                pass
         await reboot_soon('tertiary import failed', 15)
 
 

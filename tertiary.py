@@ -25,44 +25,8 @@ try:
 except Exception as e:
     print("MAC report failed (will retry next boot):", str(e))
 
-# === Self-heal circle boot (boot2 → /boot.py) once per boot ===
-# Old boot2 exited idle when tertiary.mpy download failed after soft-reset.
-# Pull fixed boot2.mpy onto /boot.py so the next reset uses cache+reboot logic.
-def _maybe_refresh_boot():
-    try:
-        if open('/boot_refreshed.txt').read().strip() == 'v2':
-            return
-    except OSError:
-        pass
-    try:
-        r = urequests.get(
-            'http://ghostshrimp.immenseaccumulationonline.online/boot2.mpy',
-            timeout=12)
-        data = r.content if r.status_code == 200 else b''
-        try:
-            r.close()
-        except Exception:
-            pass
-        if data and len(data) > 1500:
-            with open('/boot.py.tmp', 'wb') as f:
-                f.write(data)
-            try:
-                os.remove('/boot.py')
-            except OSError:
-                pass
-            os.rename('/boot.py.tmp', '/boot.py')
-            with open('/boot_refreshed.txt', 'w') as f:
-                f.write('v2')
-            print('boot.py refreshed from boot2.mpy (%d bytes)' % len(data))
-        else:
-            print('boot2.mpy refresh skipped, len=', len(data) if data else 0)
-    except Exception as e:
-        print('boot2.mpy refresh failed:', e)
-
-try:
-    _maybe_refresh_boot()
-except Exception as e:
-    print('boot refresh err', e)
+# Do NOT overwrite /boot.py from tertiary — boot is flashed/initialized separately.
+# (Writing boot2.mpy bytecode into /boot.py bricks the next reboot.)
 
 machine.freq(120000000)
 
