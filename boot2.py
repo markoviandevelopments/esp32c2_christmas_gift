@@ -1,4 +1,6 @@
-# boot.py - FINAL for round screens (DNS + long URLs + BLE buffer fix)
+# boot2.py - Circle-screen boot (DNS + long URLs + BLE buffer fix)
+# Flow: BLE provision if needed → WiFi → download tertiary.mpy (or use cache) → import
+# Must NEVER exit idle: any failure path soft-reboots so the chip recovers alone.
 import asyncio
 import bluetooth
 import gc
@@ -42,6 +44,10 @@ provisioned_server_port = ''   # empty = no port in URL
 
 ssid_handle = pass_handle = server_ip_handle = server_port_handle = None
 
+# Minimum valid tertiary.mpy size — refuse to overwrite cache with HTML/error bodies
+MIN_TERTIARY_BYTES = 2000
+
+
 def ble_irq(event, data):
     global connected, provisioned_ssid, provisioned_pass, provisioned_server_ip, provisioned_server_port
     if event == _IRQ_CENTRAL_CONNECT:
@@ -58,24 +64,30 @@ def ble_irq(event, data):
             decoded = value.decode('utf-8').rstrip('\x00')
             if value_handle == ssid_handle:
                 provisioned_ssid = decoded
-                with open('/ssid.txt', 'w') as f: f.write(decoded)
+                with open('/ssid.txt', 'w') as f:
+                    f.write(decoded)
                 print('SSID saved:', decoded)
             elif value_handle == pass_handle:
                 provisioned_pass = decoded
-                with open('/pass.txt', 'w') as f: f.write(decoded)
+                with open('/pass.txt', 'w') as f:
+                    f.write(decoded)
                 print('Password saved')
             elif value_handle == server_ip_handle:
                 provisioned_server_ip = decoded
-                with open('/server_ip.txt', 'w') as f: f.write(decoded)
+                with open('/server_ip.txt', 'w') as f:
+                    f.write(decoded)
                 print('Server host saved:', decoded)
             elif value_handle == server_port_handle:
                 provisioned_server_port = decoded
-                with open('/server_port.txt', 'w') as f: f.write(decoded)
+                with open('/server_port.txt', 'w') as f:
+                    f.write(decoded)
                 print('Server port saved:', decoded)
         except Exception as e:
             print('IRQ error:', e)
 
+
 ble.irq(ble_irq)
+
 
 def register_services():
     global ssid_handle, pass_handle, server_ip_handle, server_port_handle
@@ -91,20 +103,53 @@ def register_services():
     ble.gatts_set_buffer(server_ip_handle, 80)
     print('Services registered')
 
+
 register_services()
 print('Ready - starting advertising')
 gc.collect()
 
-async def connect_wifi(ssid, password):
+
+def stop_ble():
+    """Free RAM before WiFi + large mpy import (C2 is tight)."""
+    global ble
+    try:
+        ble.gap_advertise(None)
+    except Exception:
+        pass
+    try:
+        ble.active(False)
+    except Exception:
+        pass
+    gc.collect()
+    print('BLE off, free=', gc.mem_free())
+
+
+async def reboot_soon(reason, seconds=20):
+    """Never leave the chip idle forever."""
+    print(reason, '- reboot in', seconds, 's')
+    await asyncio.sleep(seconds)
+    machine.reset()
+
+
+async def connect_wifi(ssid, password, tries=30):
     print('Free memory before WiFi:', gc.mem_free())
     sta = network.WLAN(network.STA_IF)
     if sta.isconnected():
         print('Already connected:', sta.ifconfig()[0])
         return True
-    sta.active(True)
-    sta.connect(ssid, password)
-    print(f'Connecting to WiFi "{ssid}"...')
-    for _ in range(30):
+    try:
+        if not sta.active():
+            sta.active(True)
+        try:
+            sta.disconnect()
+        except Exception:
+            pass
+        sta.connect(ssid, password)
+    except Exception as e:
+        print('WiFi connect err:', e)
+        return False
+    print('Connecting to WiFi "%s"...' % ssid)
+    for _ in range(tries):
         if sta.isconnected():
             ip = sta.ifconfig()[0]
             print('WiFi connected:', ip)
@@ -113,54 +158,63 @@ async def connect_wifi(ssid, password):
     print('WiFi failed')
     return False
 
+
+def has_local_tertiary():
+    try:
+        st = os.stat('/tertiary.mpy')
+        return st[6] >= MIN_TERTIARY_BYTES
+    except OSError:
+        return False
+
+
 async def download_tertiary():
-    url = f'http://{provisioned_server_ip}/tertiary.mpy'   # clean long URL, no port
-    print(f'Downloading from {url}')
+    """
+    Try a short OTA of tertiary.mpy. On any failure keep the existing cache.
+    Never write a tiny/error body over a good local file.
+    """
+    url = 'http://%s/tertiary.mpy' % provisioned_server_ip
+    print('Downloading from', url)
     print('Free memory before download:', gc.mem_free())
-    for attempt in range(5):
+    # Few attempts, short timeout — soft-reset recovers better than sitting here 2 minutes
+    for attempt in range(3):
         try:
-            resp = urequests.get(url, timeout=15)
-            if resp.status_code == 200:
-                with open('/tertiary.mpy', 'wb') as f:
-                    f.write(resp.content)
-                print('Downloaded tertiary.mpy (' + str(len(resp.content)) + ' bytes)')
-                try:
-                    resp.close()
-                except Exception:
-                    pass
-                return True
+            resp = urequests.get(url, timeout=10)
+            code = resp.status_code
+            data = resp.content
             try:
                 resp.close()
             except Exception:
                 pass
+            if code == 200 and data and len(data) >= MIN_TERTIARY_BYTES:
+                # Atomic-ish replace so a reset mid-write is less likely to brick cache
+                with open('/tertiary.mpy.tmp', 'wb') as f:
+                    f.write(data)
+                try:
+                    os.remove('/tertiary.mpy')
+                except OSError:
+                    pass
+                os.rename('/tertiary.mpy.tmp', '/tertiary.mpy')
+                print('Downloaded tertiary.mpy (%d bytes)' % len(data))
+                return True
+            print('Bad tertiary response:', code, len(data) if data else 0)
         except Exception as e:
             print('Download error:', e)
-        await asyncio.sleep(5)
-    print('Download failed')
+        gc.collect()
+        await asyncio.sleep(2)
+    print('Download failed (will try cache if present)')
     return False
 
-def has_local_tertiary():
-    try:
-        os.stat('/tertiary.mpy')
-        return True
-    except OSError:
-        return False
-
-async def reboot_soon(reason, seconds=30):
-    """Never leave the chip idle forever — always recover via soft reboot."""
-    print(reason, '- reboot in', seconds, 's')
-    await asyncio.sleep(seconds)
-    machine.reset()
 
 async def run_tertiary():
-    # Prefer a fresh download, but fall back to the last good tertiary.mpy on flash
-    # so a down desktop server does not brick the circle screens.
+    # Prefer network OTA, but always fall back to last good tertiary.mpy on flash.
+    # Old boot2 would exit idle when download failed — that left screens dead after soft reset.
+    stop_ble()
     downloaded = await download_tertiary()
     if not downloaded:
         if has_local_tertiary():
             print('Using cached /tertiary.mpy')
         else:
-            await reboot_soon('No tertiary.mpy available')
+            await reboot_soon('No tertiary.mpy available', 15)
             return
 
     gc.collect()
@@ -169,7 +223,7 @@ async def run_tertiary():
         import tertiary
         print('tertiary.mpy running')
         # tertiary owns the main loop; if it ever returns, reboot
-        await reboot_soon('tertiary returned')
+        await reboot_soon('tertiary returned', 10)
     except Exception as e:
         print('Import failed:', e)
         try:
@@ -178,7 +232,8 @@ async def run_tertiary():
         except Exception:
             pass
         print('Free memory after failed import:', gc.mem_free())
-        await reboot_soon('tertiary import failed')
+        await reboot_soon('tertiary import failed', 15)
+
 
 async def advertise_and_provision():
     global connected
@@ -205,7 +260,7 @@ async def advertise_and_provision():
                 if await connect_wifi(provisioned_ssid, provisioned_pass):
                     await run_tertiary()
                 else:
-                    await reboot_soon('WiFi failed after provision')
+                    await reboot_soon('WiFi failed after provision', 15)
                 return
             await asyncio.sleep_ms(100)
         print('Timeout - no full credentials')
@@ -213,32 +268,43 @@ async def advertise_and_provision():
         while connected:
             await asyncio.sleep_ms(100)
 
+
 async def main():
     global provisioned_ssid, provisioned_pass, provisioned_server_ip, provisioned_server_port
     gc.collect()
     print('Free memory at start:', gc.mem_free())
     try:
         provisioned_ssid = open('/ssid.txt').read().strip()
-    except OSError: pass
+    except OSError:
+        pass
     try:
         provisioned_pass = open('/pass.txt').read().strip()
-    except OSError: pass
+    except OSError:
+        pass
     try:
         provisioned_server_ip = open('/server_ip.txt').read().strip() or 'ghostshrimp.immenseaccumulationonline.online'
-    except OSError: pass
+    except OSError:
+        pass
     try:
         provisioned_server_port = open('/server_port.txt').read().strip() or ''
-    except OSError: pass
+    except OSError:
+        pass
 
     if provisioned_ssid and provisioned_pass:
         print('Saved credentials found - connecting directly')
-        if await connect_wifi(provisioned_ssid, provisioned_pass):
-            await run_tertiary()
-            return
-        # WiFi down — still try cached tertiary after reboot cycle; do not hang
-        await reboot_soon('WiFi failed with saved credentials')
+        # A few WiFi attempts before rebooting (soft-reset can leave radio flaky)
+        for attempt in range(3):
+            if await connect_wifi(provisioned_ssid, provisioned_pass, tries=20):
+                await run_tertiary()
+                return
+            print('WiFi attempt', attempt + 1, 'failed')
+            await asyncio.sleep(2)
+        # Do not fall into forever-BLE when we already have creds — reboot and retry
+        await reboot_soon('WiFi failed with saved credentials', 15)
         return
+
     await advertise_and_provision()
-    await reboot_soon('boot ended without tertiary')
+    await reboot_soon('boot ended without tertiary', 30)
+
 
 asyncio.run(main())

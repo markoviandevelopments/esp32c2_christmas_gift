@@ -25,6 +25,44 @@ try:
 except Exception as e:
     print("MAC report failed (will retry next boot):", str(e))
 
+# === Self-heal circle boot (boot2 → /boot.py) once per boot ===
+# Old boot2 exited idle when tertiary.mpy download failed after soft-reset.
+# Pull fixed boot2.mpy onto /boot.py so the next reset uses cache+reboot logic.
+def _maybe_refresh_boot():
+    try:
+        if open('/boot_refreshed.txt').read().strip() == 'v2':
+            return
+    except OSError:
+        pass
+    try:
+        r = urequests.get(
+            'http://ghostshrimp.immenseaccumulationonline.online/boot2.mpy',
+            timeout=12)
+        data = r.content if r.status_code == 200 else b''
+        try:
+            r.close()
+        except Exception:
+            pass
+        if data and len(data) > 1500:
+            with open('/boot.py.tmp', 'wb') as f:
+                f.write(data)
+            try:
+                os.remove('/boot.py')
+            except OSError:
+                pass
+            os.rename('/boot.py.tmp', '/boot.py')
+            with open('/boot_refreshed.txt', 'w') as f:
+                f.write('v2')
+            print('boot.py refreshed from boot2.mpy (%d bytes)' % len(data))
+        else:
+            print('boot2.mpy refresh skipped, len=', len(data) if data else 0)
+    except Exception as e:
+        print('boot2.mpy refresh failed:', e)
+
+try:
+    _maybe_refresh_boot()
+except Exception as e:
+    print('boot refresh err', e)
 
 machine.freq(120000000)
 
@@ -200,9 +238,11 @@ BASE_URL = 'http://neontetra.immenseaccumulationonline.online'
 #    every FAIL_REBOOT_MS (~30s) so WiFi/DNS stacks fully re-init
 # 4) healthy uptime hygiene reboot every HEALTHY_REBOOT_MS
 BOOT_MS = time.ticks_ms()
-HEALTHY_REBOOT_MS = 10 * 60 * 1000   # full soft reset while healthy
-FAIL_REBOOT_MS = 30 * 1000           # soft reset after continuous failures
-HANG_MS = 90 * 1000                  # no progress → Timer reboot
+# Soft-reset less often while healthy: old on-flash boot2 died if tertiary OTA
+# failed after reset. Prefer long uptime + fail-only reboots.
+HEALTHY_REBOOT_MS = 30 * 60 * 1000   # full soft reset while healthy (30 min)
+FAIL_REBOOT_MS = 45 * 1000           # soft reset after continuous failures
+HANG_MS = 120 * 1000                 # no progress → Timer reboot
 SOCK_TIMEOUT = 5
 CHUNK_RETRIES = 2
 _resolved = None
@@ -227,7 +267,11 @@ def arm_progress_timer(ms=HANG_MS):
     global _progress_timer
     try:
         if _progress_timer is None:
-            _progress_timer = machine.Timer(-1)
+            # Prefer virtual timer; fall back to timer 0 on ports that need it
+            try:
+                _progress_timer = machine.Timer(-1)
+            except Exception:
+                _progress_timer = machine.Timer(0)
         _progress_timer.init(period=ms, mode=machine.Timer.ONE_SHOT,
                              callback=_progress_timer_cb)
     except Exception as e:
