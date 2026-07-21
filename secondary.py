@@ -437,8 +437,9 @@ if saved_ip in ('108.254.1.184', 'ghostshrimp.immenseaccumulationonline.online')
 
     with open('/server_ip.txt', 'w') as f:
         f.write("update.immenseaccumulationonline.online")
+    # Empty port: Cloudflare tunnels are reached on :80; internal 9019 is CF-side only
     with open('/server_port.txt', 'w') as f:
-        f.write("8080")
+        f.write("")
     with open('/ip_updated.txt', 'w') as f:
         f.write("done")
 
@@ -446,25 +447,35 @@ if saved_ip in ('108.254.1.184', 'ghostshrimp.immenseaccumulationonline.online')
     time.sleep(3)
     machine.reset()
 
-# === Data proxy base URL (honors provisioned host + port) ===
+# === Data proxy base URL ===
+# Provisioner may store port "8080" as a Cloudflare UI marker. Cloudflare public
+# hostnames (*.immenseaccumulationonline.online) always map host → internal port
+# (e.g. update → localhost:9019). Devices must use http://host with NO port.
 DEFAULT_SERVER_HOST = 'update.immenseaccumulationonline.online'
-DEFAULT_SERVER_PORT = '8080'
 
-def _build_base_url():
-    try:
-        host = open('/server_ip.txt').read().strip()
-    except OSError:
-        host = ''
-    try:
-        port = open('/server_port.txt').read().strip()
-    except OSError:
-        port = ''
+def _build_base_url(host=None, port=None):
+    if host is None:
+        try:
+            host = open('/server_ip.txt').read().strip()
+        except OSError:
+            host = ''
+    if port is None:
+        try:
+            port = open('/server_port.txt').read().strip()
+        except OSError:
+            port = ''
     if not host:
         host = DEFAULT_SERVER_HOST
-    # Port 80/empty → bare host (Cloudflare HTTP). 8080 and others → explicit.
-    if port and port not in ('80', '443'):
-        return 'http://%s:%s' % (host, port)
-    return 'http://%s' % host
+    host = host.strip()
+    port = (port or '').strip()
+    # Cloudflare tunnel public hostnames — never append a port
+    if host.endswith('immenseaccumulationonline.online'):
+        return 'http://%s' % host
+    # 8080 is only a provisioner/Cloudflare marker, not a real device-side port
+    if port in ('', '80', '443', '8080'):
+        return 'http://%s' % host
+    # LAN / raw IP testing: optional explicit port
+    return 'http://%s:%s' % (host, port)
 
 data_proxy_url = _build_base_url()
 tracking_url = f'{data_proxy_url}/ping'

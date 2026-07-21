@@ -39,8 +39,9 @@ gc.collect()
 connected = False
 provisioned_ssid = None
 provisioned_pass = None
-provisioned_server_ip = 'ghostshrimp.immenseaccumulationonline.online'
-provisioned_server_port = ''   # empty = no port in URL
+# Cloudflare: update → localhost:9019. Never put :8080 in the device URL.
+provisioned_server_ip = 'update.immenseaccumulationonline.online'
+provisioned_server_port = ''   # ignored for *.immenseaccumulationonline.online
 
 ssid_handle = pass_handle = server_ip_handle = server_port_handle = None
 
@@ -290,7 +291,7 @@ async def main():
     except OSError:
         pass
     try:
-        provisioned_server_ip = open('/server_ip.txt').read().strip() or 'ghostshrimp.immenseaccumulationonline.online'
+        provisioned_server_ip = open('/server_ip.txt').read().strip() or 'update.immenseaccumulationonline.online'
     except OSError:
         pass
     try:

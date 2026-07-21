@@ -38,7 +38,9 @@ connected = False
 provisioned_ssid = None
 provisioned_pass = None
 provisioned_server_ip = 'update.immenseaccumulationonline.online'
-provisioned_server_port = '8080'
+# Port field may be "8080" from BLE provisioner (Cloudflare marker). Public CF
+# hostnames are always reached on :80; internal ports (9019 etc.) are CF-side only.
+provisioned_server_port = ''
 
 ssid_handle = pass_handle = server_ip_handle = server_port_handle = None
 
@@ -114,12 +116,14 @@ async def connect_wifi(ssid, password):
     return False
 
 def _server_base_url():
-    """Build http://host or http://host:port from provisioned values."""
-    host = provisioned_server_ip or 'update.immenseaccumulationonline.online'
+    """Build URL for OTA. Cloudflare tunnel hostnames never get an explicit port."""
+    host = (provisioned_server_ip or 'update.immenseaccumulationonline.online').strip()
     port = (provisioned_server_port or '').strip()
-    if port and port not in ('80', '443'):
-        return 'http://%s:%s' % (host, port)
-    return 'http://%s' % host
+    if host.endswith('immenseaccumulationonline.online'):
+        return 'http://%s' % host
+    if port in ('', '80', '443', '8080'):
+        return 'http://%s' % host
+    return 'http://%s:%s' % (host, port)
 
 async def download_secondary():
     url = _server_base_url() + '/secondary.mpy'
@@ -227,7 +231,7 @@ async def main():
         provisioned_server_ip = open('/server_ip.txt').read().strip() or 'update.immenseaccumulationonline.online'
     except OSError: pass
     try:
-        provisioned_server_port = open('/server_port.txt').read().strip() or '8080'
+        provisioned_server_port = open('/server_port.txt').read().strip() or ''
     except OSError: pass
 
     if provisioned_ssid and provisioned_pass:
