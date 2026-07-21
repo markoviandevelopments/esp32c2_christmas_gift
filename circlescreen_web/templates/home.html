@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Upload — {{ display_name }}{% endblock %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <div class="brand glow">CircleScreen</div>
+    <div class="muted">{{ display_name }} · {{ photo_count }} photo{{ 's' if photo_count != 1 else '' }}</div>
+  </div>
+  <a class="btn btn-ghost" href="{{ url_for('logout') }}">Switch</a>
+</header>
+
+<main class="panel home-panel">
+  <div class="hero-circle">
+    <div class="ring"></div>
+    {% if preview %}
+      <img class="circle-img" src="{{ url_for('serve_img', user=user, filename=preview) }}" alt="Preview" />
+    {% else %}
+      <div class="circle-placeholder">No photos yet</div>
+    {% endif %}
+  </div>
+
+  <p class="sub center">Upload photos to your circular display</p>
+
+  <form method="post" action="{{ url_for('upload') }}" enctype="multipart/form-data" id="upload-form">
+    <input
+      type="file"
+      name="images"
+      id="images"
+      accept="image/*"
+      multiple
+      capture="environment"
+      class="file-input"
+    />
+    <label for="images" class="btn btn-primary btn-block btn-lg">
+      Select Photos
+    </label>
+    <div id="preview-list" class="preview-list hidden"></div>
+    <button type="submit" id="upload-btn" class="btn btn-accent btn-block hidden">
+      Upload selected
+    </button>
+  </form>
+</main>
+
+<nav class="bottom-nav">
+  <a class="nav-item active" href="{{ url_for('home') }}">
+    <span class="nav-icon">↑</span>
+    Upload
+  </a>
+  <a class="nav-item" href="{{ url_for('gallery') }}">
+    <span class="nav-icon">▦</span>
+    Library
+  </a>
+</nav>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const input = document.getElementById('images');
+  const list = document.getElementById('preview-list');
+  const btn = document.getElementById('upload-btn');
+  input.addEventListener('change', () => {
+    list.innerHTML = '';
+    const files = Array.from(input.files || []);
+    if (!files.length) {
+      list.classList.add('hidden');
+      btn.classList.add('hidden');
+      return;
+    }
+    list.classList.remove('hidden');
+    btn.classList.remove('hidden');
+    btn.textContent = 'Upload ' + files.length + ' photo' + (files.length > 1 ? 's' : '');
+    files.slice(0, 12).forEach((file) => {
+      const url = URL.createObjectURL(file);
+      const el = document.createElement('div');
+      el.className = 'preview-item';
+      el.innerHTML = '<div class="preview-circle"><img src="' + url + '" alt=""></div>';
+      list.appendChild(el);
+    });
+  });
+})();
+</script>
+{% endblock %}

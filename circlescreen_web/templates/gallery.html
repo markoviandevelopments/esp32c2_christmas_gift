@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Library — {{ display_name }}{% endblock %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <div class="brand glow">Library</div>
+    <div class="muted">{{ display_name }} · {{ photos|length }} photo{{ 's' if photos|length != 1 else '' }}</div>
+  </div>
+  <a class="btn btn-ghost" href="{{ url_for('logout') }}">Switch</a>
+</header>
+
+<main class="gallery-wrap">
+  {% if not photos %}
+    <p class="empty">No photos yet — upload some!</p>
+  {% else %}
+    <div class="grid">
+      {% for fn in photos %}
+        <figure class="card">
+          <a href="{{ url_for('serve_img', user=user, filename=fn) }}" target="_blank" rel="noopener">
+            <img src="{{ url_for('serve_img', user=user, filename=fn) }}" alt="{{ fn }}" loading="lazy" />
+          </a>
+          <form method="post" action="{{ url_for('delete_photo', filename=fn) }}" class="card-actions"
+                onsubmit="return confirm('Delete this photo?');">
+            <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+          </form>
+        </figure>
+      {% endfor %}
+    </div>
+  {% endif %}
+</main>
+
+<nav class="bottom-nav">
+  <a class="nav-item" href="{{ url_for('home') }}">
+    <span class="nav-icon">↑</span>
+    Upload
+  </a>
+  <a class="nav-item active" href="{{ url_for('gallery') }}">
+    <span class="nav-icon">▦</span>
+    Library
+  </a>
+</nav>
+{% endblock %}

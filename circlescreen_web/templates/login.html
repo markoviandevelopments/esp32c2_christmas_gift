@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Choose Your Screen — CircleScreen{% endblock %}
+{% block body %}
+<main class="panel login-panel">
+  <h1 class="glow">Choose Your Screen</h1>
+  <p class="sub">Enter the PIN for your circle display</p>
+
+  <form method="post" class="form" autocomplete="off">
+    <label class="label" for="user">Screen</label>
+    <select name="user" id="user" class="input" required>
+      <option value="" disabled {% if not selected %}selected{% endif %}>Select screen</option>
+      {% for id, name in users %}
+        <option value="{{ id }}" {% if selected == id %}selected{% endif %}>{{ name }}</option>
+      {% endfor %}
+    </select>
+
+    <label class="label" for="pin">PIN</label>
+    <input
+      class="input pin-input"
+      type="password"
+      name="pin"
+      id="pin"
+      inputmode="numeric"
+      pattern="[0-9]*"
+      maxlength="8"
+      placeholder="••••"
+      required
+      autocomplete="current-password"
+    />
+
+    {% if error %}
+      <p class="error">{{ error }}</p>
+    {% endif %}
+
+    <button type="submit" class="btn btn-primary btn-block">Connect</button>
+  </form>
+</main>
+{% endblock %}
