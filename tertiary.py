@@ -191,23 +191,76 @@ PHOTO_HOST = 'neontetra.immenseaccumulationonline.online'
 PHOTO_PORT = 80
 BASE_URL = 'http://neontetra.immenseaccumulationonline.online'
 
-# === Hang recovery (NO hardware WDT — it reboot-looped on C2 before any draw) ===
-# - socket settimeout so network stalls raise instead of freezing forever
-# - soft reboot every 5 minutes from main loop (only when not blocked)
-# - never hard-reset on transient WiFi / fetch failures
+# === Hang recovery (no hardware WDT — it reboot-looped on C2 before any draw) ===
+# Layers:
+# 1) socket settimeout so most network stalls raise instead of freezing forever
+# 2) soft Timer "progress WDT" — if no successful progress for HANG_MS, reboot
+#    even when the main thread is stuck in DNS/connect (Timer still fires)
+# 3) on continuous photo/server failure: show error, keep retrying, soft reboot
+#    every FAIL_REBOOT_MS (~30s) so WiFi/DNS stacks fully re-init
+# 4) healthy uptime hygiene reboot every HEALTHY_REBOOT_MS
 BOOT_MS = time.ticks_ms()
-REBOOT_MS = 5 * 60 * 1000
+HEALTHY_REBOOT_MS = 10 * 60 * 1000   # full soft reset while healthy
+FAIL_REBOOT_MS = 30 * 1000           # soft reset after continuous failures
+HANG_MS = 90 * 1000                  # no progress → Timer reboot
 SOCK_TIMEOUT = 5
 CHUNK_RETRIES = 2
 _resolved = None
+_fail_since = None                   # ticks_ms when current fail streak began
+_progress_timer = None
 
-def maybe_periodic_reboot():
-    if time.ticks_diff(time.ticks_ms(), BOOT_MS) >= REBOOT_MS:
-        print('5-minute reboot')
-        time.sleep_ms(200)
-        machine.reset()
+def soft_reset(reason=''):
+    print('RESET:', reason)
+    time.sleep_ms(150)
+    machine.reset()
+
+def _progress_timer_cb(t):
+    # Runs from timer IRQ context — keep minimal; machine.reset is safe here.
+    try:
+        print('progress WDT')
+    except Exception:
+        pass
+    machine.reset()
+
+def arm_progress_timer(ms=HANG_MS):
+    """Rearm soft hang watchdog. Call on any real progress (chunk/photo/loop)."""
+    global _progress_timer
+    try:
+        if _progress_timer is None:
+            _progress_timer = machine.Timer(-1)
+        _progress_timer.init(period=ms, mode=machine.Timer.ONE_SHOT,
+                             callback=_progress_timer_cb)
+    except Exception as e:
+        print('timer arm fail', e)
+
+def kick_progress():
+    arm_progress_timer(HANG_MS)
+
+def maybe_healthy_reboot():
+    if time.ticks_diff(time.ticks_ms(), BOOT_MS) >= HEALTHY_REBOOT_MS:
+        soft_reset('healthy uptime')
+
+def note_fail_start():
+    global _fail_since
+    if _fail_since is None:
+        _fail_since = time.ticks_ms()
+
+def clear_fail_streak():
+    global _fail_since
+    _fail_since = None
+
+def fail_elapsed_ms():
+    if _fail_since is None:
+        return 0
+    return time.ticks_diff(time.ticks_ms(), _fail_since)
+
+def maybe_fail_reboot():
+    """After ~30s of continuous failures, soft reboot (message already shown)."""
+    if _fail_since is not None and fail_elapsed_ms() >= FAIL_REBOOT_MS:
+        soft_reset('fail streak 30s')
 
 def ensure_wifi():
+    kick_progress()
     sta = network.WLAN(network.STA_IF)
     if sta.isconnected():
         return True
@@ -230,7 +283,9 @@ def ensure_wifi():
         print('wifi err', e)
         return False
     for _ in range(25):
-        maybe_periodic_reboot()
+        kick_progress()
+        maybe_healthy_reboot()
+        maybe_fail_reboot()
         if sta.isconnected():
             print('WiFi ok', sta.ifconfig()[0])
             return True
@@ -242,6 +297,7 @@ def resolve_host():
     global _resolved
     if _resolved is not None:
         return _resolved
+    # getaddrinfo can hang on some ESP builds — progress Timer is the backstop
     ai = usocket.getaddrinfo(PHOTO_HOST, PHOTO_PORT, 0, usocket.SOCK_STREAM)
     _resolved = ai[0][-1]
     return _resolved
@@ -324,13 +380,18 @@ try:
 except Exception as e:
     print('display life-sign failed', e)
 
+# Arm progress timer only AFTER display init so a reboot still shows life-sign next boot
+arm_progress_timer(HANG_MS)
+
 # === Photo constants ===
 CHUNKS = 225
 TOTAL_PIXELS = 240 * 240
 CHUNK_BYTES = 512
 
 def update_photo():
-    maybe_periodic_reboot()
+    kick_progress()
+    maybe_healthy_reboot()
+    maybe_fail_reboot()
     if not ensure_wifi():
         print('no wifi')
         return False
@@ -341,7 +402,8 @@ def update_photo():
     pixel_index = 0
 
     for chunk_n in range(CHUNKS):
-        maybe_periodic_reboot()
+        kick_progress()
+        maybe_healthy_reboot()
         data = None
         for attempt in range(CHUNK_RETRIES):
             data = http_get_chunk(chunk_n)
@@ -357,6 +419,8 @@ def update_photo():
             print('chunk fail', chunk_n)
             return False
 
+        # Successful chunk = real progress (rearms hang timer)
+        kick_progress()
         for i in range(0, CHUNK_BYTES, 2):
             send_byte(data[i], 1)
             send_byte(data[i + 1], 1)
@@ -430,38 +494,61 @@ def draw_text(x_start, y_start, text):
                         send_byte(0xFF, 1)
             x += 6
 
-# === Main loop: draw photos; soft 5-min reboot only (no WDT, no fail-streak reset) ===
+# === Main loop: keep retrying forever; never sit permanently hung ===
+# - success: brief dwell, then next photo
+# - fail: show NO PHOTO / CHECK SERVER, retry immediately, soft reboot after ~30s
+# - true hang (DNS/socket freeze): progress Timer reboots after HANG_MS without kick
 while True:
     try:
-        maybe_periodic_reboot()
+        kick_progress()
+        maybe_healthy_reboot()
+        maybe_fail_reboot()
         gc.collect()
         print('=== photo update free=', gc.mem_free())
         if update_photo():
+            clear_fail_streak()
+            kick_progress()
             print('Photo SUCCESS')
             draw_text(80, 100, "ENJOY!!!")
             t0 = time.ticks_ms()
             while time.ticks_diff(time.ticks_ms(), t0) < 5000:
-                maybe_periodic_reboot()
+                kick_progress()
+                maybe_healthy_reboot()
                 machine.idle()
                 time.sleep_ms(200)
         else:
-            print('Photo FAIL')
-            draw_text(40, 100, "NO PHOTO")
-            draw_text(20, 130, "CHECK SERVER")
+            note_fail_start()
+            print('Photo FAIL elapsed_ms=', fail_elapsed_ms())
+            # Draw error first so a soft reboot still leaves a useful message on panel
+            try:
+                draw_text(40, 100, "NO PHOTO")
+                draw_text(20, 130, "CHECK SERVER")
+            except Exception as de:
+                print('draw err', de)
+            # Short pause then retry; if fail streak hits 30s, soft_reset
             t0 = time.ticks_ms()
-            while time.ticks_diff(time.ticks_ms(), t0) < 3000:
-                maybe_periodic_reboot()
+            while time.ticks_diff(time.ticks_ms(), t0) < 2500:
+                maybe_fail_reboot()
+                maybe_healthy_reboot()
+                # Do NOT kick_progress here — let hang timer also cover stuck fail paths
                 time.sleep_ms(200)
+            maybe_fail_reboot()
     except Exception as e:
+        note_fail_start()
         print('MAIN EXC:', e)
         try:
             import sys
             sys.print_exception(e)
         except Exception:
             pass
-        # Do NOT hard-reset here — that caused blank-screen reboot loops.
-        # Wait and retry so the chip stays up long enough to draw / log.
+        try:
+            draw_text(40, 100, "NO PHOTO")
+            draw_text(20, 130, "CHECK SERVER")
+        except Exception:
+            pass
+        # Stay up briefly to paint the message, then keep retrying / 30s reboot
         t0 = time.ticks_ms()
-        while time.ticks_diff(time.ticks_ms(), t0) < 3000:
-            maybe_periodic_reboot()
+        while time.ticks_diff(time.ticks_ms(), t0) < 2500:
+            maybe_fail_reboot()
             time.sleep_ms(200)
+        maybe_fail_reboot()

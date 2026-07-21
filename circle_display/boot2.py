@@ -124,25 +124,61 @@ async def download_tertiary():
                 with open('/tertiary.mpy', 'wb') as f:
                     f.write(resp.content)
                 print('Downloaded tertiary.mpy (' + str(len(resp.content)) + ' bytes)')
+                try:
+                    resp.close()
+                except Exception:
+                    pass
                 return True
+            try:
+                resp.close()
+            except Exception:
+                pass
         except Exception as e:
             print('Download error:', e)
         await asyncio.sleep(5)
     print('Download failed')
     return False
 
+def has_local_tertiary():
+    try:
+        os.stat('/tertiary.mpy')
+        return True
+    except OSError:
+        return False
+
+async def reboot_soon(reason, seconds=30):
+    """Never leave the chip idle forever — always recover via soft reboot."""
+    print(reason, '- reboot in', seconds, 's')
+    await asyncio.sleep(seconds)
+    machine.reset()
+
 async def run_tertiary():
-    if await download_tertiary():
-        gc.collect()
-        print('Free memory before import:', gc.mem_free())
+    # Prefer a fresh download, but fall back to the last good tertiary.mpy on flash
+    # so a down desktop server does not brick the circle screens.
+    downloaded = await download_tertiary()
+    if not downloaded:
+        if has_local_tertiary():
+            print('Using cached /tertiary.mpy')
+        else:
+            await reboot_soon('No tertiary.mpy available')
+            return
+
+    gc.collect()
+    print('Free memory before import:', gc.mem_free())
+    try:
+        import tertiary
+        print('tertiary.mpy running')
+        # tertiary owns the main loop; if it ever returns, reboot
+        await reboot_soon('tertiary returned')
+    except Exception as e:
+        print('Import failed:', e)
         try:
-            import tertiary
-            print('tertiary.mpy running')
-        except Exception as e:
-            print('Import failed:', e)
             import sys
             sys.print_exception(e)
-            print('Free memory after failed import:', gc.mem_free())
+        except Exception:
+            pass
+        print('Free memory after failed import:', gc.mem_free())
+        await reboot_soon('tertiary import failed')
 
 async def advertise_and_provision():
     global connected
@@ -168,6 +204,8 @@ async def advertise_and_provision():
                 ble.gap_advertise(None)
                 if await connect_wifi(provisioned_ssid, provisioned_pass):
                     await run_tertiary()
+                else:
+                    await reboot_soon('WiFi failed after provision')
                 return
             await asyncio.sleep_ms(100)
         print('Timeout - no full credentials')
@@ -197,6 +235,10 @@ async def main():
         if await connect_wifi(provisioned_ssid, provisioned_pass):
             await run_tertiary()
             return
+        # WiFi down — still try cached tertiary after reboot cycle; do not hang
+        await reboot_soon('WiFi failed with saved credentials')
+        return
     await advertise_and_provision()
+    await reboot_soon('boot ended without tertiary')
 
 asyncio.run(main())

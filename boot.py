@@ -124,24 +124,58 @@ async def download_secondary():
                 with open('/secondary.mpy', 'wb') as f:
                     f.write(resp.content)
                 print('Downloaded secondary.mpy (' + str(len(resp.content)) + ' bytes)')
+                try:
+                    resp.close()
+                except Exception:
+                    pass
                 return True
+            try:
+                resp.close()
+            except Exception:
+                pass
         except Exception as e:
             print('Download error:', e)
         await asyncio.sleep(5)
     print('Download failed')
     return False
 
+def has_local_secondary():
+    try:
+        os.stat('/secondary.mpy')
+        return True
+    except OSError:
+        return False
+
+async def reboot_soon(reason, seconds=30):
+    """Never leave the chip idle forever — always recover via soft reboot."""
+    print(reason, '- reboot in', seconds, 's')
+    await asyncio.sleep(seconds)
+    machine.reset()
+
 async def run_secondary():
-    if await download_secondary():
-        gc.collect()
-        print('Free memory before import:', gc.mem_free())
+    # Prefer fresh download; fall back to last good secondary.mpy if desktop is down.
+    downloaded = await download_secondary()
+    if not downloaded:
+        if has_local_secondary():
+            print('Using cached /secondary.mpy')
+        else:
+            await reboot_soon('No secondary.mpy available')
+            return
+
+    gc.collect()
+    print('Free memory before import:', gc.mem_free())
+    try:
+        import secondary
+        print('secondary.mpy running')
+        await reboot_soon('secondary returned')
+    except Exception as e:
+        print('Import failed:', e)
         try:
-            import secondary
-            print('secondary.mpy running')
-        except Exception as e:
-            print('Import failed:', e)
             import sys
             sys.print_exception(e)
+        except Exception:
+            pass
+        await reboot_soon('secondary import failed')
 
 async def advertise_and_provision():
     global connected
@@ -162,6 +196,8 @@ async def advertise_and_provision():
                 ble.gap_advertise(None)
                 if await connect_wifi(provisioned_ssid, provisioned_pass):
                     await run_secondary()
+                else:
+                    await reboot_soon('WiFi failed after provision')
                 return
             await asyncio.sleep_ms(100)
         print('Timeout - no full credentials')
@@ -191,6 +227,9 @@ async def main():
         if await connect_wifi(provisioned_ssid, provisioned_pass):
             await run_secondary()
             return
+        await reboot_soon('WiFi failed with saved credentials')
+        return
     await advertise_and_provision()
+    await reboot_soon('boot ended without secondary')
 
 asyncio.run(main())
