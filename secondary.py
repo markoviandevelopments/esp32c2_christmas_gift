@@ -4,31 +4,25 @@ import machine
 import network
 import gc
 import ujson
-import usocket
 import random
 import os
-# ===================== FIXED MAC CAPTURE (javamoss:9022 raw TCP) =====================
-# === Get MAC and WiFi interface ===
+
+# === MAC (non-fatal; short timeout so a down tunnel cannot stall boot) ===
 mac_bytes = machine.unique_id()
 mac_str = ':'.join(['{:02X}'.format(b) for b in mac_bytes]).upper()
-print(f"Reporting MAC {mac_str} to javamoss.immenseaccumulationonline.online/mac ...")
+print("Free memory at secondary start:", gc.mem_free())
+print("MAC", mac_str)
 try:
     r = urequests.post(
         'http://javamoss.immenseaccumulationonline.online/mac',
-        data=mac_str,          # plain text MAC in body
-        timeout=10
+        data=mac_str,
+        timeout=5,
     )
-    if r.status_code == 200 or r.status_code == 204:
-        print("✅ MAC successfully sent to javamoss server")
-    else:
-        print(f"MAC sent but server returned {r.status_code}")
+    print("MAC report status", r.status_code)
     r.close()
 except Exception as e:
-    print("MAC report failed (will retry next boot):", str(e))
-
-
-# === Print free memory before anything else ===
-print("Free memory at secondary start:", gc.mem_free())
+    print("MAC report failed:", e)
+gc.collect()
 # === Pins ===
 sck = machine.Pin(8, machine.Pin.OUT)
 mosi = machine.Pin(20, machine.Pin.OUT)
@@ -558,7 +552,7 @@ while True:
         draw_text(8, 4, display_name + " " + coin)
         draw_text(8, 22, f"{coin}:" + last_price)
         try:
-            val_str = f"VAL:${float(last_value):.2f}"
+            val_str = "VAL:$%.2f" % float(last_value)
         except Exception:
             val_str = "VAL:$---"
         draw_text(8, 42, val_str)
@@ -597,7 +591,7 @@ while True:
                 machine.idle()
             draw_big_coin_logo()
             try:
-                draw_text(30, 4, f"VAL:${float(last_value):.2f}")
+                draw_text(30, 4, "VAL:$%.2f" % float(last_value))
             except Exception:
                 draw_text(30, 4, "VAL:$---")
 

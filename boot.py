@@ -1,4 +1,6 @@
-# boot.py - Final domain-ready version + fixed long hostname support
+# boot.py - Rectangular screens (ST7735 crypto)
+# Cloudflare: provision host like update.immenseaccumulationonline.online
+# (maps to desktop :9019). Never put :8080 in the request URL for CF hostnames.
 import asyncio
 import bluetooth
 import gc
@@ -11,14 +13,12 @@ import binascii
 
 gc.collect()
 
-# Print MAC early
 mac_bytes = machine.unique_id()
 mac_str = ':'.join(['{:02X}'.format(b) for b in mac_bytes])
 print("=== XH-C2X MAC ===")
 print(mac_str)
 print("=================================")
 
-# BLE UUIDs
 _SERVICE_UUID = bluetooth.UUID('12345678-1234-1234-1234-123456789abc')
 _SSID_UUID = bluetooth.UUID('87654321-4321-4321-4321-cba987654321')
 _PASS_UUID = bluetooth.UUID('cba98765-4321-4321-4321-123456789abc')
@@ -38,11 +38,11 @@ connected = False
 provisioned_ssid = None
 provisioned_pass = None
 provisioned_server_ip = 'update.immenseaccumulationonline.online'
-# Port field may be "8080" from BLE provisioner (Cloudflare marker). Public CF
-# hostnames are always reached on :80; internal ports (9019 etc.) are CF-side only.
 provisioned_server_port = ''
 
 ssid_handle = pass_handle = server_ip_handle = server_port_handle = None
+MIN_SECONDARY_BYTES = 2000
+
 
 def ble_irq(event, data):
     global connected, provisioned_ssid, provisioned_pass, provisioned_server_ip, provisioned_server_port
@@ -60,24 +60,30 @@ def ble_irq(event, data):
             decoded = value.decode('utf-8').rstrip('\x00')
             if value_handle == ssid_handle:
                 provisioned_ssid = decoded
-                with open('/ssid.txt', 'w') as f: f.write(decoded)
+                with open('/ssid.txt', 'w') as f:
+                    f.write(decoded)
                 print('SSID saved:', decoded)
             elif value_handle == pass_handle:
                 provisioned_pass = decoded
-                with open('/pass.txt', 'w') as f: f.write(decoded)
+                with open('/pass.txt', 'w') as f:
+                    f.write(decoded)
                 print('Password saved')
             elif value_handle == server_ip_handle:
                 provisioned_server_ip = decoded
-                with open('/server_ip.txt', 'w') as f: f.write(decoded)
+                with open('/server_ip.txt', 'w') as f:
+                    f.write(decoded)
                 print('Server host saved:', decoded)
             elif value_handle == server_port_handle:
                 provisioned_server_port = decoded
-                with open('/server_port.txt', 'w') as f: f.write(decoded)
+                with open('/server_port.txt', 'w') as f:
+                    f.write(decoded)
                 print('Server port saved:', decoded)
         except Exception as e:
             print('IRQ error:', e)
 
+
 ble.irq(ble_irq)
+
 
 def register_services():
     global ssid_handle, pass_handle, server_ip_handle, server_port_handle
@@ -89,89 +95,140 @@ def register_services():
     )
     handles = ble.gatts_register_services([(_SERVICE_UUID, chars)])[0]
     ssid_handle, pass_handle, server_ip_handle, server_port_handle = handles
-    # ←←← THIS IS THE FIX FOR LONG HOSTNAMES
-    ble.gatts_set_buffer(server_ip_handle, 80)  # enough for any DNS name
+    ble.gatts_set_buffer(server_ip_handle, 80)
     print('Services registered')
 
-register_services()   # ← only once
+
+register_services()
 print('Ready - starting advertising')
 gc.collect()
 
-async def connect_wifi(ssid, password):
+
+def stop_ble():
+    """ESP32-C2 needs this RAM back before downloading/importing secondary.mpy."""
+    global ble
+    try:
+        ble.gap_advertise(None)
+    except Exception:
+        pass
+    try:
+        ble.active(False)
+    except Exception:
+        pass
+    gc.collect()
+    print('BLE off, free=', gc.mem_free())
+
+
+async def connect_wifi(ssid, password, tries=35):
     print('Free memory before WiFi:', gc.mem_free())
     sta = network.WLAN(network.STA_IF)
     if sta.isconnected():
         print('Already connected:', sta.ifconfig()[0])
         return True
-    sta.active(True)
-    sta.connect(ssid, password)
-    print(f'Connecting to WiFi "{ssid}"...')
-    for _ in range(30):
+    try:
+        if not sta.active():
+            sta.active(True)
+        try:
+            sta.disconnect()
+        except Exception:
+            pass
+        sta.connect(ssid, password)
+    except Exception as e:
+        print('WiFi connect err:', e)
+        return False
+    print('Connecting to WiFi "%s"...' % ssid)
+    for _ in range(tries):
         if sta.isconnected():
-            ip = sta.ifconfig()[0]
-            print('WiFi connected:', ip)
+            print('WiFi connected:', sta.ifconfig()[0])
             return True
         await asyncio.sleep(1)
     print('WiFi failed')
     return False
 
-def _server_base_url():
-    """Build URL for OTA. Cloudflare tunnel hostnames never get an explicit port."""
-    host = (provisioned_server_ip or 'update.immenseaccumulationonline.online').strip()
-    port = (provisioned_server_port or '').strip()
+
+def _server_base_url(host=None, port=None):
+    if host is None:
+        host = provisioned_server_ip
+    if port is None:
+        port = provisioned_server_port
+    host = (host or 'update.immenseaccumulationonline.online').strip()
+    port = (port or '').strip()
     if host.endswith('immenseaccumulationonline.online'):
         return 'http://%s' % host
     if port in ('', '80', '443', '8080'):
         return 'http://%s' % host
     return 'http://%s:%s' % (host, port)
 
-async def download_secondary():
-    url = _server_base_url() + '/secondary.mpy'
-    print(f'Downloading from {url}')
-    print('Free memory before download:', gc.mem_free())
-    for attempt in range(5):
-        try:
-            resp = urequests.get(url, timeout=10)
-            if resp.status_code == 200 and resp.content and len(resp.content) > 1000:
-                with open('/secondary.mpy', 'wb') as f:
-                    f.write(resp.content)
-                print('Downloaded secondary.mpy (' + str(len(resp.content)) + ' bytes)')
-                try:
-                    resp.close()
-                except Exception:
-                    pass
-                return True
-            try:
-                resp.close()
-            except Exception:
-                pass
-        except Exception as e:
-            print('Download error:', e)
-        await asyncio.sleep(5)
-    print('Download failed')
-    return False
 
 def has_local_secondary():
     try:
         st = os.stat('/secondary.mpy')
-        return st[6] > 1000
+        return st[6] >= MIN_SECONDARY_BYTES
     except OSError:
         return False
 
-async def reboot_soon(reason, seconds=30):
-    """Never leave the chip idle forever — always recover via soft reboot."""
+
+async def download_secondary(max_attempts=4):
+    hosts = []
+    primary = (provisioned_server_ip or '').strip()
+    if primary:
+        hosts.append(primary)
+    for h in (
+        'update.immenseaccumulationonline.online',
+        'ghostshrimp.immenseaccumulationonline.online',
+    ):
+        if h not in hosts:
+            hosts.append(h)
+
+    print('Free memory before download:', gc.mem_free())
+    for host in hosts:
+        base = _server_base_url(host, provisioned_server_port)
+        url = base + '/secondary.mpy'
+        print('Downloading from', url)
+        for attempt in range(max_attempts):
+            try:
+                resp = urequests.get(url, timeout=15)
+                code = resp.status_code
+                data = resp.content
+                try:
+                    resp.close()
+                except Exception:
+                    pass
+                if code == 200 and data and len(data) >= MIN_SECONDARY_BYTES and data[0:1] == b'M':
+                    with open('/secondary.mpy.tmp', 'wb') as f:
+                        f.write(data)
+                    try:
+                        os.remove('/secondary.mpy')
+                    except OSError:
+                        pass
+                    os.rename('/secondary.mpy.tmp', '/secondary.mpy')
+                    print('Downloaded secondary.mpy (%d bytes) from %s' % (len(data), host))
+                    return True
+                print('Bad secondary response:', code, len(data) if data else 0)
+            except Exception as e:
+                print('Download error:', e)
+            gc.collect()
+            await asyncio.sleep(2)
+    print('Download failed (will try cache if present)')
+    return False
+
+
+async def reboot_soon(reason, seconds=20):
     print(reason, '- reboot in', seconds, 's')
     await asyncio.sleep(seconds)
     machine.reset()
 
+
 async def run_secondary():
-    # Prefer fresh download; fall back to last good secondary.mpy if desktop is down.
-    downloaded = await download_secondary()
+    stop_ble()
+    had_cache = has_local_secondary()
+    attempts = 2 if had_cache else 4
+    downloaded = await download_secondary(max_attempts=attempts)
     if not downloaded:
-        if has_local_secondary():
+        if had_cache or has_local_secondary():
             print('Using cached /secondary.mpy')
         else:
-            await reboot_soon('No secondary.mpy available')
+            await reboot_soon('No secondary.mpy available', 15)
             return
 
     gc.collect()
@@ -179,7 +236,7 @@ async def run_secondary():
     try:
         import secondary
         print('secondary.mpy running')
-        await reboot_soon('secondary returned')
+        await reboot_soon('secondary returned', 10)
     except Exception as e:
         print('Import failed:', e)
         try:
@@ -187,7 +244,15 @@ async def run_secondary():
             sys.print_exception(e)
         except Exception:
             pass
-        await reboot_soon('secondary import failed')
+        print('Free memory after failed import:', gc.mem_free())
+        if downloaded:
+            try:
+                os.remove('/secondary.mpy')
+                print('Removed bad secondary.mpy')
+            except OSError:
+                pass
+        await reboot_soon('secondary import failed', 15)
+
 
 async def advertise_and_provision():
     global connected
@@ -209,7 +274,7 @@ async def advertise_and_provision():
                 if await connect_wifi(provisioned_ssid, provisioned_pass):
                     await run_secondary()
                 else:
-                    await reboot_soon('WiFi failed after provision')
+                    await reboot_soon('WiFi failed after provision', 15)
                 return
             await asyncio.sleep_ms(100)
         print('Timeout - no full credentials')
@@ -217,31 +282,43 @@ async def advertise_and_provision():
         while connected:
             await asyncio.sleep_ms(100)
 
+
 async def main():
     global provisioned_ssid, provisioned_pass, provisioned_server_ip, provisioned_server_port
     gc.collect()
     print('Free memory at start:', gc.mem_free())
     try:
         provisioned_ssid = open('/ssid.txt').read().strip()
-    except OSError: pass
+    except OSError:
+        pass
     try:
         provisioned_pass = open('/pass.txt').read().strip()
-    except OSError: pass
+    except OSError:
+        pass
     try:
         provisioned_server_ip = open('/server_ip.txt').read().strip() or 'update.immenseaccumulationonline.online'
-    except OSError: pass
+    except OSError:
+        pass
     try:
         provisioned_server_port = open('/server_port.txt').read().strip() or ''
-    except OSError: pass
+    except OSError:
+        pass
+
+    print('Server host=', provisioned_server_ip, 'port_field=', provisioned_server_port or '(none)')
+    print('OTA base=', _server_base_url())
 
     if provisioned_ssid and provisioned_pass:
         print('Saved credentials found - connecting directly')
-        if await connect_wifi(provisioned_ssid, provisioned_pass):
-            await run_secondary()
-            return
-        await reboot_soon('WiFi failed with saved credentials')
+        for attempt in range(3):
+            if await connect_wifi(provisioned_ssid, provisioned_pass, tries=25):
+                await run_secondary()
+                return
+            print('WiFi attempt', attempt + 1, 'failed')
+            await asyncio.sleep(2)
+        await reboot_soon('WiFi failed with saved credentials', 15)
         return
     await advertise_and_provision()
-    await reboot_soon('boot ended without secondary')
+    await reboot_soon('boot ended without secondary', 30)
+
 
 asyncio.run(main())
