@@ -15,11 +15,20 @@
   {% else %}
     <div class="grid">
       {% for fn in photos %}
+        {# Always use a plain filename string — never a dict #}
+        {% set name = fn.filename if fn is mapping else fn %}
         <figure class="card">
-          <a href="{{ url_for('serve_img', user=user, filename=fn) }}" target="_blank" rel="noopener">
-            <img src="{{ url_for('serve_img', user=user, filename=fn) }}" alt="{{ fn }}" loading="lazy" />
+          <a href="{{ url_for('serve_img', user=user, filename=name) }}" target="_blank" rel="noopener">
+            <img
+              src="{{ url_for('serve_img', user=user, filename=name) }}"
+              alt="{{ name }}"
+              loading="lazy"
+              decoding="async"
+              width="240"
+              height="240"
+            />
           </a>
-          <form method="post" action="{{ url_for('delete_photo', filename=fn) }}" class="card-actions"
+          <form method="post" action="{{ url_for('delete_photo', filename=name) }}" class="card-actions"
                 onsubmit="return confirm('Delete this photo?');">
             <button type="submit" class="btn btn-danger btn-sm">Delete</button>
           </form>

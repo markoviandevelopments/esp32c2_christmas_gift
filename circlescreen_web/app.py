@@ -1,20 +1,15 @@
 #!/usr/bin/env python3
 """
-CircleScreen Web Uploader — port 9468
-Mobile + desktop friendly UI that mirrors the Flutter circlescreen-app:
-  - Screen selection + PIN login
-  - Upload photos (circular 240×240 crop for displays)
-  - Gallery list / preview / delete
-  - Session-based auth (protects filesystem paths)
+CircleScreen Web Uploader — port 9468 (PM2: circlescreen_web)
 
-Writes full-resolution images under circle_displays/photos/*_full_photos
-and circular crops under both circle_displays and x_mas_gift device folders
-so ESP32 circle screens (xmas_photos.py) see new photos.
+CRITICAL: gallery templates receive plain filename STRINGS only.
+Never pass status dicts as `photos` — that breaks <img src>.
 """
 from __future__ import annotations
 
 import os
 import secrets
+import shutil
 import functools
 from datetime import datetime
 from io import BytesIO
@@ -32,12 +27,12 @@ from flask import (
     abort,
 )
 from PIL import Image, ImageDraw, ImageOps
-from werkzeug.utils import secure_filename
-from werkzeug.security import safe_join
 
 app = Flask(__name__)
+app.config["TEMPLATES_AUTO_RELOAD"] = True
 
-# Persistent secret so sessions survive restarts (not hardcoded in repo)
+DISPLAY_SIZE = 240
+
 _SECRET_PATH = os.path.join(os.path.dirname(__file__), ".session_secret")
 if os.path.isfile(_SECRET_PATH):
     with open(_SECRET_PATH, "rb") as f:
@@ -54,11 +49,10 @@ else:
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
-    MAX_CONTENT_LENGTH=32 * 1024 * 1024,  # 32 MB
-    PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * 14,  # 14 days
+    MAX_CONTENT_LENGTH=32 * 1024 * 1024,
+    PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * 14,
 )
 
-# Same PINs as circlescreens_server / Flutter app
 PINS = {
     "pattie": "1234",
     "melanie": "2026",
@@ -75,7 +69,6 @@ DISPLAY_NAMES = {
     "brufam": "Douglas & Shari",
 }
 
-# App storage (matches circlescreens_server.py on :9026)
 APP_PHOTOS = "/home/preston/Desktop/circle_displays/photos"
 FULL_FOLDERS = {
     "melanie": os.path.join(APP_PHOTOS, "melanie_full_photos"),
@@ -92,38 +85,276 @@ CROPPED_FOLDERS = {
     "brufam": os.path.join(APP_PHOTOS, "circle_display_5"),
 }
 
-# Device feed used by xmas_photos.py / neontetra (ESP32 circle screens)
 DEVICE_PHOTOS = "/home/preston/Desktop/x_mas_gift/circle_display/photos"
 DEVICE_CROPPED = {
     "pattie": os.path.join(DEVICE_PHOTOS, "circle_display_1"),
     "melanie": os.path.join(DEVICE_PHOTOS, "circle_display_2"),
     "robbins": os.path.join(DEVICE_PHOTOS, "circle_display_3"),
     "home": os.path.join(DEVICE_PHOTOS, "circle_display_4"),
-    # brufam has no matching device dir in x_mas_gift yet
 }
 
 ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"}
 
+
+def _user_folders(user: str) -> list[str]:
+    folders = [FULL_FOLDERS[user], CROPPED_FOLDERS[user]]
+    dev = DEVICE_CROPPED.get(user)
+    if dev:
+        folders.append(dev)
+    return folders
+
+
+def _display_folders(user: str) -> list[str]:
+    folders = [CROPPED_FOLDERS[user]]
+    dev = DEVICE_CROPPED.get(user)
+    if dev:
+        folders.append(dev)
+    return folders
+
+
+def _is_image(name: str) -> bool:
+    return os.path.splitext(name.lower())[1] in ALLOWED_EXT
+
+
+def _safe_name(filename: str) -> str | None:
+    # Tolerate accidental dict-string leftovers from old bug
+    s = str(filename)
+    if s.startswith("{") and "filename" in s:
+        # try extract 'filename': 'foo.jpg'
+        import re
+        m = re.search(r"['\"]filename['\"]\s*:\s*['\"]([^'\"]+)['\"]", s)
+        if m:
+            s = m.group(1)
+    name = os.path.basename(s.replace("\\", "/"))
+    if not name or name in (".", "..") or name.startswith(".") or ".." in name:
+        return None
+    if not _is_image(name):
+        return None
+    return name
+
+
 for folder in list(FULL_FOLDERS.values()) + list(CROPPED_FOLDERS.values()):
     os.makedirs(folder, exist_ok=True)
 for folder in DEVICE_CROPPED.values():
-    if folder:
-        os.makedirs(folder, exist_ok=True)
+    os.makedirs(folder, exist_ok=True)
 
 
 def create_circular_crop(input_stream, output_path: str) -> None:
     with Image.open(input_stream) as img:
         img = ImageOps.exif_transpose(img)
         img = img.convert("RGBA")
-        img = ImageOps.fit(img, (240, 240), Image.LANCZOS)
-        mask = Image.new("L", (240, 240), 0)
+        img = ImageOps.fit(img, (DISPLAY_SIZE, DISPLAY_SIZE), Image.LANCZOS)
+        mask = Image.new("L", (DISPLAY_SIZE, DISPLAY_SIZE), 0)
         draw = ImageDraw.Draw(mask)
-        draw.ellipse((0, 0, 240, 240), fill=255)
-        circular = Image.new("RGBA", (240, 240), (0, 0, 0, 0))
+        draw.ellipse((0, 0, DISPLAY_SIZE - 1, DISPLAY_SIZE - 1), fill=255)
+        circular = Image.new("RGBA", (DISPLAY_SIZE, DISPLAY_SIZE), (0, 0, 0, 0))
         circular.paste(img, (0, 0), mask)
-        background = Image.new("RGB", (240, 240), (0, 0, 0))
+        background = Image.new("RGB", (DISPLAY_SIZE, DISPLAY_SIZE), (0, 0, 0))
         background.paste(circular, mask=circular.split()[3])
-        background.save(output_path, "JPEG", quality=95)
+        os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+        background.save(output_path, "JPEG", quality=95, optimize=True)
+
+
+def can_decode_image(source) -> tuple[bool, str]:
+    try:
+        with Image.open(source) as img:
+            img.load()
+            w, h = img.size
+            if w < 1 or h < 1:
+                return False, "Empty image"
+            if w * h > 80_000_000:
+                return False, f"Too large ({w}×{h})"
+        return True, "ok"
+    except Exception as e:
+        return False, f"Cannot decode: {e}"
+
+
+def is_display_ready(path: str) -> tuple[bool, str]:
+    if not os.path.isfile(path):
+        return False, "Missing"
+    try:
+        with Image.open(path) as img:
+            img.load()
+            if img.size != (DISPLAY_SIZE, DISPLAY_SIZE):
+                return False, f"Size {img.size[0]}×{img.size[1]}"
+            if img.mode not in ("RGB", "L"):
+                return False, f"Mode {img.mode}"
+        return True, "ok"
+    except Exception as e:
+        return False, str(e)
+
+
+def write_display_crops(source, user: str, filename: str) -> None:
+    create_circular_crop(source, os.path.join(CROPPED_FOLDERS[user], filename))
+    dev = DEVICE_CROPPED.get(user)
+    if dev:
+        if hasattr(source, "seek"):
+            source.seek(0)
+        create_circular_crop(source, os.path.join(dev, filename))
+
+
+def repair_display_photo(user: str, name: str) -> tuple[bool, str]:
+    sources = []
+    full = os.path.join(FULL_FOLDERS[user], name)
+    if os.path.isfile(full):
+        sources.append(full)
+    for folder in _display_folders(user):
+        path = os.path.join(folder, name)
+        if os.path.isfile(path):
+            sources.append(path)
+    if not sources:
+        return False, "No source"
+    src = sources[0]
+    try:
+        out_name = name
+        base, ext = os.path.splitext(name)
+        if ext.lower() not in (".jpg", ".jpeg"):
+            out_name = base + ".jpg"
+        with open(src, "rb") as f:
+            data = f.read()
+        ok, reason = can_decode_image(BytesIO(data))
+        if not ok:
+            return False, reason
+        write_display_crops(BytesIO(data), user, out_name)
+        if out_name != name:
+            for folder in _display_folders(user):
+                old = os.path.join(folder, name)
+                if os.path.isfile(old):
+                    try:
+                        os.remove(old)
+                    except OSError:
+                        pass
+        ready, why = is_display_ready(os.path.join(CROPPED_FOLDERS[user], out_name))
+        return (True, out_name if out_name != name else "repaired") if ready else (False, why)
+    except Exception as e:
+        return False, str(e)
+
+
+def heal_user_library(user: str) -> dict[str, int]:
+    stats = {"checked": 0, "repaired": 0, "failed": 0, "synced": 0}
+    names: set[str] = set()
+    for folder in _user_folders(user):
+        if not os.path.isdir(folder):
+            continue
+        for f in os.listdir(folder):
+            if os.path.isfile(os.path.join(folder, f)) and _is_image(f):
+                names.add(f)
+
+    for name in sorted(names):
+        stats["checked"] += 1
+        crop = os.path.join(CROPPED_FOLDERS[user], name)
+        dev_dir = DEVICE_CROPPED.get(user)
+        dev = os.path.join(dev_dir, name) if dev_dir else None
+        crop_ok = is_display_ready(crop)[0] if os.path.isfile(crop) else False
+        dev_ok = is_display_ready(dev)[0] if dev and os.path.isfile(dev) else (dev is None)
+        if crop_ok and dev_ok:
+            continue
+        ok, msg = repair_display_photo(user, name)
+        if ok:
+            stats["repaired"] += 1
+            continue
+        if crop_ok and dev and not os.path.isfile(dev):
+            try:
+                shutil.copy2(crop, dev)
+                stats["synced"] += 1
+                continue
+            except OSError as e:
+                msg = str(e)
+        stats["failed"] += 1
+        print(f"[heal] FAIL {user}/{name}: {msg}")
+
+    if user in DEVICE_CROPPED:
+        crop_dir, dev_dir = CROPPED_FOLDERS[user], DEVICE_CROPPED[user]
+        try:
+            crop_files = {
+                f for f in os.listdir(crop_dir)
+                if _is_image(f) and os.path.isfile(os.path.join(crop_dir, f))
+            }
+            dev_files = {
+                f for f in os.listdir(dev_dir)
+                if _is_image(f) and os.path.isfile(os.path.join(dev_dir, f))
+            }
+        except OSError:
+            return stats
+        for name in sorted(crop_files - dev_files):
+            src = os.path.join(crop_dir, name)
+            if is_display_ready(src)[0]:
+                try:
+                    shutil.copy2(src, os.path.join(dev_dir, name))
+                    stats["synced"] += 1
+                except OSError:
+                    pass
+        for name in sorted(dev_files - crop_files):
+            src = os.path.join(dev_dir, name)
+            if is_display_ready(src)[0]:
+                try:
+                    shutil.copy2(src, os.path.join(crop_dir, name))
+                    stats["synced"] += 1
+                except OSError:
+                    pass
+            else:
+                ok, _ = repair_display_photo(user, name)
+                stats["repaired" if ok else "failed"] += 1
+    return stats
+
+
+def list_photos(user: str) -> list[str]:
+    """Return plain filename STRINGS only (for templates / <img src>)."""
+    names: set[str] = set()
+    for folder in _display_folders(user):
+        if not os.path.isdir(folder):
+            continue
+        try:
+            for f in os.listdir(folder):
+                if os.path.isfile(os.path.join(folder, f)) and _is_image(f):
+                    names.add(f)
+        except OSError:
+            continue
+
+    def sort_key(name: str):
+        for folder in _display_folders(user):
+            path = os.path.join(folder, name)
+            if os.path.isfile(path):
+                try:
+                    return (-os.path.getmtime(path), name)
+                except OSError:
+                    pass
+        return (0, name)
+
+    # Defensive: only strings
+    return [str(n) for n in sorted(names, key=sort_key)]
+
+
+def resolve_photo_path(user: str, filename: str) -> str | None:
+    if user not in FULL_FOLDERS:
+        return None
+    name = _safe_name(filename)
+    if not name:
+        return None
+    for folder in _user_folders(user):
+        path = os.path.join(folder, name)
+        try:
+            if os.path.commonpath(
+                [os.path.abspath(folder), os.path.abspath(path)]
+            ) != os.path.abspath(folder):
+                continue
+        except ValueError:
+            continue
+        if os.path.isfile(path):
+            return path
+    return None
+
+
+print("[startup] Healing display libraries…")
+for _u in PINS:
+    try:
+        s = heal_user_library(_u)
+        print(
+            f"[startup] {_u}: checked={s['checked']} repaired={s['repaired']} "
+            f"synced={s['synced']} failed={s['failed']}"
+        )
+    except Exception as e:
+        print(f"[startup] heal error {_u}: {e}")
 
 
 def login_required(view):
@@ -142,52 +373,17 @@ def current_user() -> str | None:
     return u if u in PINS else None
 
 
-def list_photos(user: str) -> list[str]:
-    folder = CROPPED_FOLDERS[user]
-    if not os.path.isdir(folder):
-        return []
-    files = [
-        f
-        for f in os.listdir(folder)
-        if os.path.isfile(os.path.join(folder, f))
-        and os.path.splitext(f.lower())[1] in ALLOWED_EXT
-    ]
-    files.sort(reverse=True)
-    return files
-
-
-def safe_filename_in_user(user: str, filename: str) -> str | None:
-    """Resolve a user photo path; reject path traversal."""
-    if user not in FULL_FOLDERS:
-        return None
-    name = os.path.basename(filename)
-    if name != filename or ".." in name or name.startswith("."):
-        return None
-    # Prefer full-res for serving to browsers
-    full = os.path.join(FULL_FOLDERS[user], name)
-    if os.path.isfile(full):
-        return full
-    cropped = os.path.join(CROPPED_FOLDERS[user], name)
-    if os.path.isfile(cropped):
-        return cropped
-    return None
-
-
 @app.route("/")
 def index():
-    if current_user():
-        return redirect(url_for("home"))
-    return redirect(url_for("login"))
+    return redirect(url_for("home" if current_user() else "login"))
 
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if current_user() and request.method == "GET":
         return redirect(url_for("home"))
-
     error = None
     selected = request.form.get("user") or request.args.get("user") or ""
-
     if request.method == "POST":
         user = (request.form.get("user") or "").strip().lower()
         pin = (request.form.get("pin") or "").strip()
@@ -202,11 +398,10 @@ def login():
             session["display_name"] = DISPLAY_NAMES.get(user, user)
             flash(f"Connected as {session['display_name']}", "ok")
             nxt = request.args.get("next") or url_for("home")
-            if not nxt.startswith("/"):
+            if not nxt.startswith("/") or nxt.startswith("//"):
                 nxt = url_for("home")
             return redirect(nxt)
         selected = user
-
     return render_template(
         "login.html",
         users=[(u, DISPLAY_NAMES.get(u, u)) for u in PINS],
@@ -226,7 +421,7 @@ def logout():
 @login_required
 def home():
     user = current_user()
-    photos = list_photos(user)
+    photos = list_photos(user)  # plain strings
     return render_template(
         "home.html",
         user=user,
@@ -240,7 +435,9 @@ def home():
 @login_required
 def gallery():
     user = current_user()
+    # PLAIN STRINGS ONLY — never pass dicts here
     photos = list_photos(user)
+    assert all(isinstance(p, str) for p in photos), "photos must be filename strings"
     return render_template(
         "gallery.html",
         user=user,
@@ -258,8 +455,7 @@ def upload():
         flash("No images selected", "err")
         return redirect(url_for("home"))
 
-    success = 0
-    fail = 0
+    success = fail = 0
     for file in files:
         if not file or not file.filename:
             continue
@@ -272,23 +468,30 @@ def upload():
             if not data:
                 fail += 1
                 continue
-            ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-            fn = f"{ts}.jpg"
-            full_path = os.path.join(FULL_FOLDERS[user], fn)
-            crop_path = os.path.join(CROPPED_FOLDERS[user], fn)
-            with open(full_path, "wb") as out:
+            ok, _ = can_decode_image(BytesIO(data))
+            if not ok:
+                fail += 1
+                continue
+            fn = datetime.now().strftime("%Y%m%d_%H%M%S_%f") + ".jpg"
+            with open(os.path.join(FULL_FOLDERS[user], fn), "wb") as out:
                 out.write(data)
-            create_circular_crop(BytesIO(data), crop_path)
-            # Mirror crop to ESP device folder used by xmas_photos.py
-            dev = DEVICE_CROPPED.get(user)
-            if dev:
-                os.makedirs(dev, exist_ok=True)
-                create_circular_crop(BytesIO(data), os.path.join(dev, fn))
+            write_display_crops(BytesIO(data), user, fn)
+            ready, _ = is_display_ready(os.path.join(CROPPED_FOLDERS[user], fn))
+            if not ready:
+                for folder in _user_folders(user):
+                    p = os.path.join(folder, fn)
+                    if os.path.isfile(p):
+                        try:
+                            os.remove(p)
+                        except OSError:
+                            pass
+                fail += 1
+                continue
             success += 1
             print(f"[upload] {user} → {fn}")
         except Exception as e:
-            print(f"[upload] error {user}: {e}")
             fail += 1
+            print(f"[upload] error {user}: {e}")
 
     if fail == 0:
         flash(f"Uploaded {success} photo(s) 🎉", "ok")
@@ -301,48 +504,41 @@ def upload():
 @login_required
 def delete_photo(filename):
     user = current_user()
-    name = os.path.basename(filename)
-    if name != filename:
+    name = _safe_name(filename)
+    if not name:
         abort(400)
     deleted = False
-    for folder in (
-        FULL_FOLDERS[user],
-        CROPPED_FOLDERS[user],
-        DEVICE_CROPPED.get(user),
-    ):
-        if not folder:
-            continue
+    for folder in _user_folders(user):
         path = os.path.join(folder, name)
-        # Ensure path stays inside folder
-        if os.path.commonpath([os.path.abspath(folder), os.path.abspath(path)]) != os.path.abspath(
-            folder
-        ):
+        try:
+            if os.path.commonpath(
+                [os.path.abspath(folder), os.path.abspath(path)]
+            ) != os.path.abspath(folder):
+                continue
+        except ValueError:
             continue
         if os.path.isfile(path):
-            os.remove(path)
-            deleted = True
-    if deleted:
-        flash("Deleted", "ok")
-    else:
-        flash("Not found", "err")
+            try:
+                os.remove(path)
+                deleted = True
+            except OSError as e:
+                print(f"[delete] {path}: {e}")
+    flash("Deleted" if deleted else "Not found", "ok" if deleted else "err")
     return redirect(url_for("gallery"))
 
 
 @app.route("/img/<user>/<path:filename>")
 @login_required
 def serve_img(user, filename):
-    """Serve images only for the logged-in user (or reject)."""
     me = current_user()
     if user != me:
         abort(403)
-    path = safe_filename_in_user(user, filename)
+    path = resolve_photo_path(user, filename)
     if not path:
         abort(404)
-    directory, name = os.path.dirname(path), os.path.basename(path)
-    return send_from_directory(directory, name)
+    return send_from_directory(os.path.dirname(path), os.path.basename(path))
 
 
-# Optional JSON API compatible with mobile app (session cookie OR can add JWT later)
 @app.route("/api/list")
 @login_required
 def api_list():
@@ -358,6 +554,7 @@ def api_me():
 
 if __name__ == "__main__":
     print("CircleScreen Web Uploader")
-    print("  http://0.0.0.0:9468")
-    print("  Users:", ", ".join(f"{u}" for u in PINS))
+    print(f"  http://0.0.0.0:9468  (display {DISPLAY_SIZE}×{DISPLAY_SIZE})")
+    for u in PINS:
+        print(f"    {u}: {len(list_photos(u))} photos")
     app.run(host="0.0.0.0", port=9468, debug=False)
