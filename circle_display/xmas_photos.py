@@ -10,10 +10,10 @@ app = Flask(__name__)
 # === CONFIGURATION ===
 BASE_DIR = '/home/preston/Desktop/x_mas_gift/circle_display'
 PHOTO_DIRS = {
-    "screen1": os.path.join(BASE_DIR, 'photos', 'circle_display_1'),  # First Circle Screen - Pattie
-    "screen2": os.path.join(BASE_DIR, 'photos', 'circle_display_2'),  # Second Circle Screen - Melanie
-    "screen3": os.path.join(BASE_DIR, 'photos', 'circle_display_3'),  # Third Circle Screen - Robbins
-    "screen4": os.path.join(BASE_DIR, 'photos', 'circle_display_4'),  # Fourth Circle Screen - Preston and Willoh
+    "screen1": os.path.join(BASE_DIR, 'photos', 'Pattie'),              # Pattie
+    "screen2": os.path.join(BASE_DIR, 'photos', 'Rob & Melanie'),       # Rob & Melanie
+    "screen3": os.path.join(BASE_DIR, 'photos', 'Arwyn & Bella'),       # Arwyn & Bella
+    "screen4": os.path.join(BASE_DIR, 'photos', 'Preston & Willoh'),    # Preston & Willoh
 }
 TARGET_SIZE = 240
 RESAMPLE_FILTER = Image.LANCZOS
@@ -38,11 +38,11 @@ SESSION_STALE_SEC = 180
 
 # MAC to directory key mapping
 mac_to_key = {
-    "34:98:7A:07:11:7C": "screen2",  # Second Circle Screen - Melanie's circle screen
-    "34:98:7A:06:FD:74": "screen1",  # First Circle Screen - Pattie's circle screen
-    "34:98:7A:07:13:40": "screen3",  # Third Circle Screen - Robbins' circle screen
-    "34:98:7A:07:09:68": "screen4",  # Fourth Circle Screen - Preston and Willoh's circle
-    "34:98:7A:07:12:B8": "screen1",  # Unknown MAC from logs - assuming screen1 (Pattie); change if needed
+    "34:98:7A:07:11:7C": "screen2",  # Rob & Melanie
+    "34:98:7A:06:FD:74": "screen1",  # Pattie
+    "34:98:7A:07:13:40": "screen3",  # Arwyn & Bella
+    "34:98:7A:07:09:68": "screen4",  # Preston & Willoh
+    "34:98:7A:07:12:B8": "screen1",  # Unknown MAC — defaulting to Pattie
 }
 
 def get_image_files(directory):
@@ -90,10 +90,10 @@ def index():
         <h2>GC9A01 RGB565 Photo Server (No Cache)</h2>
         <p>Serving 240×240 images, RGB565, converted on-the-fly</p>
         <ul>
-            <li>First Circle Screen (Pattie): {counts.get('screen1', 0)} photos</li>
-            <li>Second Circle Screen (Melanie): {counts.get('screen2', 0)} photos</li>
-            <li>Third Circle Screen (Robbins): {counts.get('screen3', 0)} photos</li>
-            <li>Fourth Circle Screen (Preston and Willoh): {counts.get('screen4', 0)} photos</li>
+            <li>Pattie: {counts.get('screen1', 0)} photos</li>
+            <li>Rob &amp; Melanie: {counts.get('screen2', 0)} photos</li>
+            <li>Arwyn &amp; Bella: {counts.get('screen3', 0)} photos</li>
+            <li>Preston &amp; Willoh: {counts.get('screen4', 0)} photos</li>
         </ul>
         <p>Use: <code>/pixel?n=0&mac=XX:XX:XX:XX:XX:XX</code> ... <code>/pixel?n={PIXELS_TOTAL//CHUNK_PIXELS - 1}&mac=XX:XX:XX:XX:XX:XX</code></p>
     """

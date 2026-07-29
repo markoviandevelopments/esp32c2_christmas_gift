@@ -12,10 +12,10 @@ app = Flask(__name__)
 BASE_DIR = '/home/preston/Desktop/circle_displays'
 
 PHOTO_DIRS = {
-    "disp1": os.path.join(BASE_DIR, 'photos', 'circle_display_1'),  # Melanie
-    "disp2": os.path.join(BASE_DIR, 'photos', 'circle_display_2'),  # Pattie
-    "disp3": os.path.join(BASE_DIR, 'photos', 'circle_display_3'),  # Robbins
-    "disp4": os.path.join(BASE_DIR, 'photos', 'circle_display_4'),  # Home/Default
+    "disp1": os.path.join(BASE_DIR, 'photos', 'Pattie'),              # Pattie
+    "disp2": os.path.join(BASE_DIR, 'photos', 'Rob & Melanie'),       # Rob & Melanie
+    "disp3": os.path.join(BASE_DIR, 'photos', 'Arwyn & Bella'),       # Arwyn & Bella
+    "disp4": os.path.join(BASE_DIR, 'photos', 'Preston & Willoh'),    # Preston & Willoh
 }
 
 TARGET_SIZE = 240

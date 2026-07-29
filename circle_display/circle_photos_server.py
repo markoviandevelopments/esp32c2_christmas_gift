@@ -10,7 +10,7 @@ FULL_FOLDER = '/home/preston/Desktop/x_mas_gift/circle_display/photos/melanie_cr
 os.makedirs(FULL_FOLDER, exist_ok=True)
 
 # Separate folder for 240x240 circular crops (for the physical display)
-CROPPED_FOLDER = '/home/preston/Desktop/x_mas_gift/circle_display/photos/circle_display_2'
+CROPPED_FOLDER = '/home/preston/Desktop/x_mas_gift/circle_display/photos/Rob & Melanie'
 os.makedirs(CROPPED_FOLDER, exist_ok=True)
 
 def create_circular_crop(input_path, output_path):
