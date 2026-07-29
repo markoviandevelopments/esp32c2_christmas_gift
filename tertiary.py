@@ -11,12 +11,27 @@ except ImportError:                      # older MicroPython builds
     import urandom as random
 
 # Bump on every change to this file so the panel shows what it is running.
-VERSION = "1.1"
+VERSION = "1.2"
 
 # ===================== FIXED MAC CAPTURE (javamoss:9022 raw TCP) =====================
 # === Get MAC and WiFi interface ===
 mac_bytes = machine.unique_id()
 mac_str = ':'.join(['{:02X}'.format(b) for b in mac_bytes]).upper()
+
+# Whose screen this is, shown under the version. Keep in sync with mac_to_key /
+# PHOTO_DIRS in circle_display/xmas_photos.py — that map decides which photos
+# get served, this one only decides what the panel prints.
+OWNERS = {
+    "34:98:7A:07:11:7C": "Rob & Melanie",
+    "34:98:7A:06:FD:74": "Pattie",
+    "34:98:7A:07:13:40": "Arwyn & Bella",
+    "34:98:7A:07:09:68": "Preston & Willoh",
+    "34:98:7A:07:12:B8": "Pattie",
+}
+# Server falls back to screen4 for unknown MACs, so match it here.
+OWNER = OWNERS.get(mac_str, "Preston & Willoh")
+print("Screen owner:", OWNER)
+
 print(f"Reporting MAC {mac_str} to javamoss.immenseaccumulationonline.online/mac ...")
 try:
     r = urequests.post(
@@ -214,7 +229,7 @@ BOOT_MS = time.ticks_ms()
 HEALTHY_REBOOT_MS = 30 * 60 * 1000   # full soft reset while healthy (30 min)
 FAIL_REBOOT_MS = 45 * 1000           # soft reset after continuous failures
 HANG_MS = 120 * 1000                 # no progress → Timer reboot
-PHOTO_DWELL_MS = 60 * 1000           # hold a drawn photo before fetching the next
+PHOTO_DWELL_MS = 5 * 60 * 1000       # hold a drawn photo before fetching the next
 SOCK_TIMEOUT = 5
 CHUNK_RETRIES = 2
 _resolved = None
@@ -468,6 +483,7 @@ font = {
     '.': [0x00,0x00,0x00,0x06,0x06],
     '$': [0x24,0x54,0xFE,0x54,0x48],
     '-': [0x08,0x08,0x08,0x08,0x08],
+    '&': [0x6C,0x92,0xAA,0x44,0x0A],
     'A': [0x7E,0x90,0x90,0x90,0x7E],
     'B': [0xFE,0x92,0x92,0x92,0x6C],
     'C': [0x7C,0x82,0x82,0x82,0x44],
@@ -528,6 +544,14 @@ def draw_text(x_start, y_start, text, color=WHITE):
                         send_byte(lo, 1)
             x += 6
 
+def text_width(text):
+    """Drawn width in px — unknown chars are skipped without advancing x."""
+    return sum(6 for c in text.upper() if c in font)
+
+def draw_text_centered(y_start, text, color=WHITE):
+    x = 120 - text_width(text) // 2
+    draw_text(x if x > 0 else 0, y_start, text, color)
+
 # === Main loop: keep retrying forever; never sit permanently hung ===
 # - success: dwell PHOTO_DWELL_MS, then next photo
 # - fail: show NO PHOTO / CHECK SERVER, retry immediately, soft reboot after ~30s
@@ -544,9 +568,9 @@ while True:
             kick_progress()
             print('Photo SUCCESS')
             text_color = random_text_color()
-            draw_text(80, 100, "ENJOY!!!", text_color)
-            # Centered under ENJOY (5 drawn chars * 6px wide, centered on x=95)
-            draw_text(83, 112, "V" + VERSION, text_color)
+            draw_text_centered(100, "ENJOY!!!", text_color)
+            draw_text_centered(112, "V" + VERSION, text_color)
+            draw_text_centered(124, OWNER, text_color)
             t0 = time.ticks_ms()
             while time.ticks_diff(time.ticks_ms(), t0) < PHOTO_DWELL_MS:
                 kick_progress()
