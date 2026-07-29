@@ -5,6 +5,13 @@ import network
 import gc
 import os
 import usocket
+try:
+    import random
+except ImportError:                      # older MicroPython builds
+    import urandom as random
+
+# Bump on every change to this file so the panel shows what it is running.
+VERSION = "1.1"
 
 # ===================== FIXED MAC CAPTURE (javamoss:9022 raw TCP) =====================
 # === Get MAC and WiFi interface ===
@@ -207,6 +214,7 @@ BOOT_MS = time.ticks_ms()
 HEALTHY_REBOOT_MS = 30 * 60 * 1000   # full soft reset while healthy (30 min)
 FAIL_REBOOT_MS = 45 * 1000           # soft reset after continuous failures
 HANG_MS = 120 * 1000                 # no progress → Timer reboot
+PHOTO_DWELL_MS = 60 * 1000           # hold a drawn photo before fetching the next
 SOCK_TIMEOUT = 5
 CHUNK_RETRIES = 2
 _resolved = None
@@ -488,7 +496,25 @@ font = {
     'Z': [0x86,0x8A,0x92,0xA2,0xC2],
 }
 
-def draw_text(x_start, y_start, text):
+WHITE = 0xFFFF
+# Bright RGB565 colors only — text sits on top of a photo, so it has to stay readable.
+TEXT_COLORS = (
+    0xFFFF,   # white
+    0xF800,   # red
+    0x07E0,   # green
+    0x001F,   # blue
+    0xFFE0,   # yellow
+    0x07FF,   # cyan
+    0xF81F,   # magenta
+    0xFD20,   # orange
+)
+
+def random_text_color():
+    return TEXT_COLORS[random.getrandbits(3) % len(TEXT_COLORS)]
+
+def draw_text(x_start, y_start, text, color=WHITE):
+    hi = color >> 8
+    lo = color & 0xFF
     x = x_start
     for char in text.upper():
         if char in font:
@@ -498,12 +524,12 @@ def draw_text(x_start, y_start, text):
                 for row in range(8):
                     if bits & (1 << (7 - row)):
                         set_window(x + col, y_start + row, x + col, y_start + row)
-                        send_byte(0xFF, 1)
-                        send_byte(0xFF, 1)
+                        send_byte(hi, 1)
+                        send_byte(lo, 1)
             x += 6
 
 # === Main loop: keep retrying forever; never sit permanently hung ===
-# - success: brief dwell, then next photo
+# - success: dwell PHOTO_DWELL_MS, then next photo
 # - fail: show NO PHOTO / CHECK SERVER, retry immediately, soft reboot after ~30s
 # - true hang (DNS/socket freeze): progress Timer reboots after HANG_MS without kick
 while True:
@@ -517,9 +543,12 @@ while True:
             clear_fail_streak()
             kick_progress()
             print('Photo SUCCESS')
-            draw_text(80, 100, "ENJOY!!!")
+            text_color = random_text_color()
+            draw_text(80, 100, "ENJOY!!!", text_color)
+            # Centered under ENJOY (5 drawn chars * 6px wide, centered on x=95)
+            draw_text(83, 112, "V" + VERSION, text_color)
             t0 = time.ticks_ms()
-            while time.ticks_diff(time.ticks_ms(), t0) < 5000:
+            while time.ticks_diff(time.ticks_ms(), t0) < PHOTO_DWELL_MS:
                 kick_progress()
                 maybe_healthy_reboot()
                 machine.idle()
