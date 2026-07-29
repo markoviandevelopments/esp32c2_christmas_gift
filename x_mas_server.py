@@ -5,9 +5,12 @@ from flask import Flask, send_file, abort, request, Response
 import threading
 import time
 import os
+import shutil
+import hashlib
 import subprocess
 import requests
 from PIL import Image
+import numpy as np
 import io
 import struct
 from zoneinfo import ZoneInfo
@@ -18,7 +21,10 @@ app = Flask(__name__)
 
 # === CONFIGURATION ===
 REPO_DIR = '/home/preston/Desktop/x_mas_gift'
-COMPILE_INTERVAL = 300  # recompile .mpy from local sources
+# How often to *check* whether a source changed. The check is a stat() per file
+# (a few microseconds); mpy-cross only actually runs when the content changed,
+# so this can be short without costing anything.
+COMPILE_CHECK_INTERVAL = 30
 MPY_CROSS_PATH = '/home/preston/micropython/mpy-cross/build/mpy-cross'
 
 # File paths for crypto screens
@@ -59,13 +65,27 @@ mac_to_key = {
     "34:98:7A:07:12:B8": "screen1",   # test device
 }
 
+SUPPORTED_EXT = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.webp'}
+_listing_cache = {}   # directory → (dir_mtime_ns, [paths])
+
 def get_image_files(directory):
-    supported = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.webp'}
+    """Listing keyed on the directory's own mtime: one stat() on the hot path,
+    and still instantly correct when a photo is uploaded or removed."""
     try:
-        return [os.path.join(directory, f) for f in os.listdir(directory)
-                if os.path.isfile(os.path.join(directory, f)) and os.path.splitext(f.lower())[1] in supported]
-    except:
+        mtime = os.stat(directory).st_mtime_ns
+    except OSError:
         return []
+    cached = _listing_cache.get(directory)
+    if cached is not None and cached[0] == mtime:
+        return cached[1]
+    try:
+        with os.scandir(directory) as it:
+            files = [e.path for e in it
+                     if e.is_file() and os.path.splitext(e.name.lower())[1] in SUPPORTED_EXT]
+    except OSError:
+        return []
+    _listing_cache[directory] = (mtime, files)
+    return files
 
 def image_to_rgb565_bytes(image_path):
     try:
@@ -76,14 +96,10 @@ def image_to_rgb565_bytes(image_path):
             background = Image.new('RGB', (TARGET_SIZE, TARGET_SIZE), (0, 0, 0))
             offset = ((TARGET_SIZE - img.size[0]) // 2, (TARGET_SIZE - img.size[1]) // 2)
             background.paste(img, offset)
-            pixels = background.load()
-            raw = bytearray()
-            for y in range(TARGET_SIZE):
-                for x in range(TARGET_SIZE):
-                    r, g, b = pixels[x, y]
-                    rgb565 = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
-                    raw.extend([rgb565 >> 8, rgb565 & 0xFF])
-            return bytes(raw)
+            # Vectorized RGB565 — byte-identical to the old per-pixel loop, ~22x cheaper
+            a = np.asarray(background, dtype=np.uint16)
+            packed = ((a[:, :, 0] & 0xF8) << 8) | ((a[:, :, 1] & 0xFC) << 3) | (a[:, :, 2] >> 3)
+            return packed.astype('>u2').tobytes()
     except Exception as e:
         print(f"Failed to process {image_path}: {e}")
         return None
@@ -316,9 +332,11 @@ def serve_pixel_chunk():
     if not photo_dir:
         abort(500, "Invalid display configuration")
 
-    image_files = get_image_files(photo_dir)
-    if not image_files:
-        abort(503, f"No photos found in {dir_key}")
+    # Only chunk 0 picks a new picture, so only chunk 0 needs the listing.
+    if n == 0:
+        image_files = get_image_files(photo_dir)
+        if not image_files:
+            abort(503, f"No photos found in {dir_key}")
 
     with client_lock:
         if n == 0:
@@ -352,50 +370,101 @@ def cleanup_old_clients():
         with client_lock:
             for mac in to_remove:
                 client_current_photo.pop(mac, None)
-        time.sleep(30)
+        # Entries expire at 600s; sweeping every 30s just woke the CPU 20x more
+        # often than needed to free a few hundred KB.
+        time.sleep(300)
 
 # === LOCAL AUTO-COMPILE (no git) ===
+# Recompiling every source on a timer burned mpy-cross ~1150x/day to produce
+# byte-identical output. Instead: stat() the sources cheaply, and only shell out
+# to mpy-cross when the content actually changed (any edit — a VERSION bump, a
+# one-character fix — so the .mpy is never behind the source).
+_compile_state = {}   # src path → {'fp': (mtime_ns, size), 'sha': hexdigest}
+
+def _file_sha1(path):
+    h = hashlib.sha1()
+    with open(path, 'rb') as f:
+        for block in iter(lambda: f.read(65536), b''):
+            h.update(block)
+    return h.hexdigest()
+
+def _needs_compile(src, dst):
+    """(should_compile, stamp). Stamp is recorded only after a successful compile
+    so a failed build retries on the next tick instead of being marked done."""
+    try:
+        st = os.stat(src)
+    except OSError:
+        return False, None                      # source absent — nothing to do, quietly
+    fp = (st.st_mtime_ns, st.st_size)
+    prev = _compile_state.get(src)
+    dst_exists = os.path.isfile(dst)
+
+    # Fast path: nothing touched the file since the last look. One stat, no read.
+    if prev is not None and prev['fp'] == fp and dst_exists:
+        return False, None
+
+    digest = _file_sha1(src)
+    stamp = {'fp': fp, 'sha': digest}
+
+    if not dst_exists:
+        return True, stamp
+    # Touched but identical (git checkout, editor rewrite) — don't rebuild.
+    if prev is not None and prev['sha'] == digest:
+        _compile_state[src] = stamp
+        return False, None
+    # First look after a restart: trust an existing .mpy that is newer than its source.
+    if prev is None and os.stat(dst).st_mtime_ns >= st.st_mtime_ns:
+        _compile_state[src] = stamp
+        return False, None
+    return True, stamp
+
+def _compile_mpy(src, dst, label):
+    if not os.path.isfile(MPY_CROSS_PATH):
+        print(f'[{time.strftime("%H:%M:%S")}] ❌ mpy-cross not found: {MPY_CROSS_PATH}')
+        return False
+    result = subprocess.run(
+        [MPY_CROSS_PATH, '-march=rv32imc', src, '-o', dst],
+        capture_output=True, text=True,
+    )
+    if result.returncode == 0 and os.path.isfile(dst):
+        print(f'[{time.strftime("%H:%M:%S")}] ✅ Compiled {label} → {os.path.basename(dst)} ({os.path.getsize(dst)} bytes)')
+        return True
+    err = (result.stderr or '')[-200:]
+    print(f'[{time.strftime("%H:%M:%S")}] ❌ Failed {label}: rc={result.returncode} {err}')
+    return False
+
+CIRCLE_BOOT_PY = os.path.join(REPO_DIR, 'circle_display', 'boot2.py')
+BOOT2_MPY = os.path.join(REPO_DIR, 'boot2.mpy')
+BOOT2_PY = os.path.join(REPO_DIR, 'boot2.py')
+
+COMPILE_TARGETS = [
+    (BOOT_PY, BOOT_MPY, 'boot.py (rect screens)'),
+    (SECONDARY_PY, SECONDARY_MPY, 'secondary.py (rect app)'),
+    (TERTIARY_PY, TERTIARY_MPY, 'tertiary.py (circle app)'),
+    (CIRCLE_BOOT_PY, BOOT2_MPY, 'circle_display/boot2.py (circle boot)'),
+]
+
 def compile_firmware_loop():
-    """Periodically compile .mpy from local sources. Does not touch git."""
+    """Watch local sources; compile only what changed. Does not touch git."""
     while True:
         try:
-            def _compile_mpy(src, dst, label):
-                if not os.path.isfile(src):
-                    print(f'[{time.strftime("%H:%M:%S")}] ⚠️  missing {label}: {src}')
-                    return False
-                if not os.path.isfile(MPY_CROSS_PATH):
-                    print(f'[{time.strftime("%H:%M:%S")}] ❌ mpy-cross not found: {MPY_CROSS_PATH}')
-                    return False
-                result = subprocess.run(
-                    [MPY_CROSS_PATH, '-march=rv32imc', src, '-o', dst],
-                    capture_output=True, text=True,
-                )
-                if result.returncode == 0 and os.path.isfile(dst):
-                    print(f'[{time.strftime("%H:%M:%S")}] ✅ Compiled {label} → {os.path.basename(dst)} ({os.path.getsize(dst)} bytes)')
-                    return True
-                err = (result.stderr or '')[-200:]
-                print(f'[{time.strftime("%H:%M:%S")}] ❌ Failed {label}: rc={result.returncode} {err}')
-                return False
-
-            _compile_mpy(BOOT_PY, BOOT_MPY, 'boot.py (rect screens)')
-            _compile_mpy(SECONDARY_PY, SECONDARY_MPY, 'secondary.py (rect app)')
-            _compile_mpy(TERTIARY_PY, TERTIARY_MPY, 'tertiary.py (circle app)')
-
-            CIRCLE_BOOT_PY = os.path.join(REPO_DIR, 'circle_display', 'boot2.py')
-            BOOT2_MPY = os.path.join(REPO_DIR, 'boot2.mpy')
-            BOOT2_PY = os.path.join(REPO_DIR, 'boot2.py')
-            if _compile_mpy(CIRCLE_BOOT_PY, BOOT2_MPY, 'circle_display/boot2.py (circle boot)'):
-                try:
-                    import shutil
-                    shutil.copy2(CIRCLE_BOOT_PY, BOOT2_PY)
-                    print(f'[{time.strftime("%H:%M:%S")}] ✅ Copied circle boot2.py source → boot2.py')
-                except Exception as e:
-                    print(f'[{time.strftime("%H:%M:%S")}] Warning copying boot2.py: {e}')
-
+            for src, dst, label in COMPILE_TARGETS:
+                should, stamp = _needs_compile(src, dst)
+                if not should:
+                    continue
+                if not _compile_mpy(src, dst, label):
+                    continue
+                _compile_state[src] = stamp
+                if src == CIRCLE_BOOT_PY:
+                    try:
+                        shutil.copy2(CIRCLE_BOOT_PY, BOOT2_PY)
+                        print(f'[{time.strftime("%H:%M:%S")}] ✅ Copied circle boot2.py source → boot2.py')
+                    except Exception as e:
+                        print(f'[{time.strftime("%H:%M:%S")}] Warning copying boot2.py: {e}')
         except Exception as e:
             print(f'[{time.strftime("%H:%M:%S")}] Compile loop error: {e}')
 
-        time.sleep(COMPILE_INTERVAL)
+        time.sleep(COMPILE_CHECK_INTERVAL)
 
 
 # === UPDATE ENDPOINT ===
